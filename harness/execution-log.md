@@ -64,3 +64,32 @@ Branch: `chore/mva-execution-harness`. Application builds remain pending.
 - These are documentation/configuration checks, not application E2E results or proof
   of automatic runtime role discovery. Fresh reviewer tasks will use the role files.
 - Review status: pending independent code and documentation-workflow E2E review.
+
+### Preparation review completion and release-note authorization
+
+PR: https://github.com/talaniz/prime-mover/pull/1
+Reviewed preparation head: `e6789adad253e0d36fe67864ff47b7f7befda5b7`.
+All eight planning commits were inspected individually and as a combined diff.
+`git rev-list --reverse origin/main..HEAD` plus per-commit `git diff-tree` verified
+one sequential contract per commit. `git check-ignore harness/build/probe.log`
+confirmed ignored output; `git ls-files harness/build/README.md` confirmed tracked
+instructions. `git diff origin/main...HEAD --check` passed, exit 0.
+
+- Code reviewer `/root/code_review`: SIGN-OFF, no actionable blockers.
+  Report: https://github.com/talaniz/prime-mover/pull/1#issuecomment-5745945327
+- Distinct E2E reviewer `/root/e2e_review`: documentation-workflow SIGN-OFF, no blockers.
+  Report: https://github.com/talaniz/prime-mover/pull/1#issuecomment-5745954181
+  Exercised successful build flow, invalid-red blocker, code findings, E2E fixes,
+  changed heads, post-review notes, and notification/merge boundaries.
+- Both independently verified role TOML, paths, commit mappings and scratch rules.
+  The active tool lacked named-role selection; each fresh reviewer task read and
+  adopted its role file's instructions. Automatic named-role discovery was not tested.
+- No findings required a fix cycle. Main task verified report contents and matching
+  head, confirms no blockers, and signs off on the preparation scope for note generation.
+- This log supports `release-notes/harness-preparation.md`. This is documentation
+  readiness only, not an MVA release, application test pass, merge or deployment.
+- Next gate: commit notes and this entry, then obtain both final-head revalidations
+  on the PR before marking ready and notifying the user. The final PR comments are
+  authoritative for that gate; no additional log-only commit is needed.
+
+Application milestone status remains **not started**; builds 001–008 remain **pending**.
