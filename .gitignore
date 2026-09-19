@@ -1,0 +1,32 @@
+# Credentials and machine-local settings
+.env
+.env.*
+!.env.example
+.private/
+config.local.*
+.npmrc
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Runtime state and databases
+data/
+state/
+worktrees/
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+*.log
+
+# Dependencies and caches
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+coverage/
+.DS_Store
