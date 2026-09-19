@@ -50,3 +50,9 @@ git diff --check
 ```
 
 Credentials, environment-specific configuration, databases and their WAL/SHM sidecars must never be committed. GitHub authentication belongs to the local credential manager; Codex authentication stays with the existing app server.
+
+## Execution harness
+
+Start with [harness/README.md](harness/README.md) for the eight ordered build contracts,
+test-first commit workflow, execution log, independent reviews, and release notes.
+The application milestone has not started; this harness is preparation only.
