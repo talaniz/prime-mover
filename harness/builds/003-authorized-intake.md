@@ -17,6 +17,10 @@ Deliver: Poller, authorization policy, issue snapshots, deduplication and lifecy
 - Repeated pages, polls and label toggles cannot duplicate execution or acknowledgments. Explicit reruns create audited generations.
 - Closure or authorization withdrawal stops new turns and interrupts active work where supported. Material issue edits pause for contract reconciliation.
 
+## Project metadata scope and required verification
+
+Apply [project metadata](../project-metadata.md) to intake for both default repositories. Test independent authorization/checkpoints, identical issue numbers across repositories, repeated pages and fair progress when one project is busy or unavailable. One global active job/turn remains the limit.
+
 ## Verification contract — red first
 
 Before coding, resolve the concrete commands, fixtures and expected assertion failures

@@ -17,6 +17,10 @@ Deliver: Git/worktree manager, app-server execution adapter, verification runner
 - No implementation occurs in the live DOOM checkout; unrelated tasks remain untouched. Worker command arguments cannot be injected from issue text.
 - Failed checks, no-op output, unresolved approvals and ambiguous remote side effects never count as completion; retries reconcile existing tasks/branches/PRs.
 
+## Project metadata scope and required verification
+
+For both defaults in [project metadata](../project-metadata.md), test isolated execution and correct repository attribution. Self-development must not change/reload the running Prime Mover service, and DOOM work must not edit its live checkout.
+
 ## Verification contract — red first
 
 Before coding, resolve the concrete commands, fixtures and expected assertion failures

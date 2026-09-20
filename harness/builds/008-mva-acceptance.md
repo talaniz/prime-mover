@@ -15,8 +15,12 @@ Deliver: Final acceptance tests/integration, CI, verified runbooks and MVA evide
 
 - Fresh checkout installs/builds and passes documented deterministic checks in CI; credentials are not exposed to untrusted tests.
 - Live acceptance proves authorized intake, single-job isolation, durable recovery, implementation PR, independent sequential reviews, honest readiness notification and operator controls.
-- All seven MVA criteria in the Drive plan have evidence; no merge/deploy occurs. All product builds are on one milestone PR.
+- All eight MVA criteria in the Drive plan have evidence; no merge/deploy occurs. All product builds are on one milestone PR.
 - Application completion is claimed only after that PR receives both independent reviews, release notes derived from the log, and both final-head revalidations.
+
+## Project metadata scope and required verification
+
+Require all eight MVA criteria, including MVA-8 project visibility, with the [project metadata](../project-metadata.md) browser walkthrough and failure scenarios. Verify two-project defaults/intake/global concurrency and the read-only DOOM Projects page against recorded Prime Mover and DOOM integration heads. The linked DOOM integration PR is part of this MVA and needs independent final-head reviews; missing dashboard or integrated evidence blocks readiness. Do not mutate production issues merely to prove defaults.
 
 ## Verification contract — red first
 

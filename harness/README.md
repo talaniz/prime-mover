@@ -56,3 +56,11 @@ Start fresh reviewer tasks in this trusted repository. The active collaboration 
 may not expose named-role selection; then load the role instructions into a fresh
 independent task. Do not assume existing sessions reload files or that writing these
 files installs/runs Prime Mover review automation.
+
+## MVA default projects and dashboard metadata
+
+The MVA tracks **Prime Mover** (`talaniz/prime-mover`) and **DOOM Dashboard**
+(`talaniz/doom-control`) by default, both based on `main`. See
+[the project metadata contract](project-metadata.md) for registry defaults, the
+read-only Projects page in the existing DOOM Dashboard, build ownership and
+cross-repository delivery. These are planned requirements, not a running feature.

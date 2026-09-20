@@ -56,3 +56,10 @@ Credentials, environment-specific configuration, databases and their WAL/SHM sid
 Start with [harness/README.md](harness/README.md) for the eight ordered build contracts,
 test-first commit workflow, execution log, independent reviews, and release notes.
 The application milestone has not started; this harness is preparation only.
+
+## Planned default projects
+
+The MVA will track `talaniz/prime-mover` and `talaniz/doom-control` (DOOM Dashboard),
+with one active job globally. A read-only Projects page in the existing DOOM Dashboard
+will show tracking and job metadata. See [the contract](harness/project-metadata.md).
+These defaults and the view are planned, not implemented or activated.
