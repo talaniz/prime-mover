@@ -17,6 +17,10 @@ Deliver: Scheduler/store/CLI, schema migrations, durable operation intents, cont
 - Restart preserves stages, budgets, pause state and pending operations; migrations preserve prior records.
 - Cancellation and retry produce auditable stable states; unsupported transitions fail. An expired lease never proves an old remote turn stopped.
 
+## Project metadata scope and required verification
+
+Implement the persistent project registry and metadata projection in [project metadata](../project-metadata.md). Test two-project global job/turn contention, restart-safe settings and read-only metadata including empty/paused/blocked/stale states, authentication, redaction and no execution side effects.
+
 ## Verification contract — red first
 
 Before coding, resolve the concrete commands, fixtures and expected assertion failures

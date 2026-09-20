@@ -17,6 +17,10 @@ Deliver: Runtime scaffold, lockfile, config schema/example, adapter interfaces, 
 - Actual installation, build, lint, unit, integration and E2E commands are documented, distinguishing offline CI checks from credential-dependent live checks.
 - A harmless isolated live app-server task completes and read-only GitHub probes identify the repository and authorization evidence. No second CLI execution backend is introduced.
 
+## Project metadata scope and required verification
+
+Define and validate the two default projects and versioned read-only metadata contract in [project metadata](../project-metadata.md). Lock transport authentication, freshness bound and per-project commands/allowlists. Tests must cover idempotent defaults, preserved operator settings and invalid/missing project configuration; read-only GitHub probes verify both repositories.
+
 ## Verification contract — red first
 
 Before coding, resolve the concrete commands, fixtures and expected assertion failures

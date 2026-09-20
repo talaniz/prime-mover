@@ -93,3 +93,32 @@ instructions. `git diff origin/main...HEAD --check` passed, exit 0.
   authoritative for that gate; no additional log-only commit is needed.
 
 Application milestone status remains **not started**; builds 001–008 remain **pending**.
+
+### MVA planning amendment: two projects and dashboard metadata
+
+User direction: track Prime Mover itself and the existing DOOM Dashboard by default;
+include a read-only Projects page in the existing dashboard in the first milestone.
+Verified checkout origins: talaniz/prime-mover and talaniz/doom-control; both remote
+HEADs resolve to main. The original Prime Mover checkout remains clean on main;
+planning edits use a separate worktree/branch. DOOM source and service are untouched.
+
+Acceptance: two explicit defaults, per-project authorization/configuration and
+identity, one global job/turn, read-only metadata with honest freshness/error states,
+secure authenticated dashboard consumption, and explicit cross-repository delivery.
+Verification contract: inspect identities and remote HEADs; check Markdown links,
+role TOML and whitespace; walk through defaults, unauthorized intake, duplicate issue
+numbers, contention, metadata states and dashboard integration dependency. No runtime
+test pass is claimed for documentation-only work. Review evidence follows on the PR.
+
+Scope is planning only: project-metadata.md and builds 001/002/003/004/008 carry the
+amendment. All application builds remain pending. The existing one-Prime-Mover-PR
+rule remains; the dashboard needs a linked integration PR in its own repository.
+
+Planning verification results: remote-origin/HEAD probes verified both identities and
+main branches; Python Markdown-link checks and role TOML parsing passed; all eight
+build contracts remain present; git diff --check passed. Operator walkthroughs of
+the seven metadata scenarios identify explicit expected outcomes and required future
+evidence. The Drive plan was edited in place to match the defaults, Projects page,
+build ownership, cross-repository delivery and new MVA-8 criterion. No application
+code/tests were run or claimed complete. Named-role selection is unavailable here;
+fresh independent reviewers receive the checked-in role instructions as fallback.
