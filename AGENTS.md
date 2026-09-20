@@ -13,7 +13,8 @@ Record material tradeoffs in the relevant design or PR. These priorities guide t
 
 ## Scope and sources of truth
 
-Prime Mover is the durable workflow worker behind DOOM. The runtime is not implemented yet.
+Prime Mover is the durable workflow worker behind DOOM. Builds 001–002 provide contracts, durable storage/scheduling, operator controls and metadata.
+Issue intake and the complete execution/review pipeline remain under development.
 Read `harness/README.md`, the next build in `harness/builds/`, and `harness/execution-log.md` before work.
 The execution log is the evidence-backed source of truth for progress and release notes;
 build files specify intended behavior, not completed behavior. Git and PR evidence resolve

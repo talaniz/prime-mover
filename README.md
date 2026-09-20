@@ -39,7 +39,7 @@ The mount currently uses the existing desktop-managed path and has no `/etc/fsta
 
 ## Development and verification
 
-Build 001 establishes the TypeScript/Node toolchain, configuration contracts and compatibility probes. The durable worker and database schema remain future builds. Follow `AGENTS.md` and the user's global PR review workflow.
+Build 001 establishes the TypeScript/Node toolchain, configuration contracts and compatibility probes. Build 002 adds the durable store/scheduler, operator controls and metadata service; complete issue execution remains future builds. Follow `AGENTS.md` and the user's global PR review workflow.
 
 Current repository checks:
 
@@ -56,14 +56,14 @@ Credentials, environment-specific configuration, databases and their WAL/SHM sid
 Start with [harness/README.md](harness/README.md) for the eight ordered build contracts,
 test-first commit workflow, execution log, independent reviews, and release notes.
 The application milestone is in progress; Build 001 contracts and compatibility checks
-are complete. The durable worker and dashboard remain under development.
+are complete. The durable store/scheduler and metadata backend are implemented through Build 002; the complete execution pipeline and dashboard remain under development.
 
 ## Planned default projects
 
 The MVA will track `talaniz/prime-mover` and `talaniz/doom-control` (DOOM Dashboard),
 with one active job globally. A read-only Projects page in the existing DOOM Dashboard
 will show tracking and job metadata. See [the contract](harness/project-metadata.md).
-These defaults and the view are planned, not implemented or activated.
+The default registry and metadata backend are implemented through Build 002; the DOOM view remains pending. No unattended intake is activated.
 
 ## Build 001 development commands
 
@@ -94,3 +94,40 @@ node scripts/probe-app-server.mjs SOCKET ISOLATED_CWD EVIDENCE_JSON
 
 Do not delete its evidence to retry an ambiguous operation. Reconcile the existing
 task first. The probe cannot substitute for the later supervised MVA rehearsal.
+
+## Local operator commands (Build 002)
+
+Prepare ignored `config.local.json` from the example with the verified external
+filesystem UUID and an owner-only metadata token file (at least 32 characters).
+No command below enables GitHub polling or deploys a service.
+
+```sh
+node dist/cli.js doctor config.local.json
+node dist/cli.js status config.local.json
+node dist/cli.js inspect config.local.json JOB_ID
+node dist/cli.js pause config.local.json
+node dist/cli.js resume config.local.json
+node dist/cli.js cancel config.local.json JOB_ID "operator reason"
+node dist/cli.js retry config.local.json JOB_ID "what was corrected"
+node dist/cli.js metadata config.local.json
+```
+
+Doctor makes read-only storage, credential and app-server checks without opening the
+runtime database. Status initializes the registry/store only after mount preflight.
+Pause stops new claims; existing work must unwind safely. Cancellation of remote work
+remains a visible request until the coordinator confirms it stopped. Retry refuses
+unresolved remote operations, active leases/turns and absent reasons; it never creates
+a fresh execution generation. The foreground metadata server exposes read-only
+HTTP over its private Unix socket and exits on SIGINT/SIGTERM.
+
+Offline `npm run check` now includes real multi-process contention, killed-worker
+persistence, fake-clock retries, cancellation, and authenticated metadata HTTP tests.
+To repeat the disposable Pi operator rehearsal explicitly:
+
+```sh
+node scripts/rehearse-operator.mjs /media/talaniz/postgresdata VERIFIED_UUID
+```
+
+This uses a temporary subtree of codex-work, existing read-only GitHub/app-server
+access and a temporary metadata server/token; it cleans up its own artifacts. It
+never enables a worker service or changes the live DOOM deployment.

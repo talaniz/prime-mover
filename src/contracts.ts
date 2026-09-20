@@ -16,6 +16,7 @@ export interface ReviewEvidence {role: 'code-review' | 'e2e-review'; taskId: str
 export interface ProjectMetadata {
   id: string; name: string; repositoryUrl: string; baseBranch: string;
   tracking: 'enabled' | 'paused' | 'blocked'; lastPollAt: string | null;
+  pollState: 'fresh' | 'stale' | 'never-polled';
   queuedJobs: number; activeJob: {id: string; stage: JobStage; issueUrl: string; prUrl: string | null} | null;
   latestOutcome: {stage: JobStage; at: string; issueUrl: string; prUrl: string | null} | null;
   blocker: string | null;

@@ -97,3 +97,43 @@ Projects page has one linked integration PR in its own repository, within this M
 Both reviewed heads and schema version must be recorded in integrated acceptance.
 Never modify the live DOOM checkout or reload either production service during
 implementation. Merge and deployment await separate user authorization.
+
+## Build 002 durable scheduling and metadata
+
+`Store` owns SQLite schema version 1, WAL/FULL-synchronous transactions, append-only
+transition events, claim attempts, persistent budget counters, operation intents and
+notification outbox. Reopen is idempotent; unknown newer schema versions fail closed.
+The configured project registry retains operator enable/disable settings on reseed;
+removed projects cannot be newly claimed. Jobs and generations are repository-scoped.
+
+Partial unique indexes enforce one lease and one recorded active turn globally.
+Claims use BEGIN IMMEDIATE and project last-claim time for fair selection. Every
+worker mutation checks owner, epoch and unexpired lease. Expiry retains ownership:
+a crashed worker never grants permission to create a replacement remote turn.
+Pending external-operation or notification intents also prevent new claims. Their
+results must be reconciled, not erased or blindly retried. Automatic external-state
+reconciliation is a later Build 007 gate, not implemented by lease expiry.
+
+The scheduler accepts a fake or real async adapter with a fenced lease, abort signal
+and assertActive check. It heartbeats while work is active and signals cancellation
+or lease loss. Adapters must honor cancellation and check ownership before side
+effects; the transport alone does not enforce scheduling. An uncertain live turn
+keeps the job reserved and returns reconciliation-required. Cancellation is terminal
+only after observed remote completion/interruption and resolved pending operations.
+Retry keeps the same generation and counters; a future explicit rerun is a distinct
+operation. Retry deadlines persist and use a clock injectable in tests.
+
+Metadata queries read registry, jobs and global pause in one SQLite read transaction.
+They project only public fields. `pollState` is fresh/stale/never-polled and is separate
+from snapshot observation time. Blocker codes map to safe fixed messages; raw failure
+text and stored issue snapshots are never returned. GET cannot create jobs or change
+operator state. The Unix socket and token are owner-only. CLI startup refuses an
+existing socket rather than deleting another server's socket; stale-socket recovery
+is still part of Build 007's supervised service design.
+
+Runtime storage preflight verifies mount target, ext4, UUID, rw option, canonical
+paths and device identity. It rejects existing and dangling symlinks, including
+SQLite WAL/SHM paths. Writability is checked at the configured root or its nearest
+existing parent, not at the filesystem's root: this Pi intentionally restricts the
+mount top level while permitting the dedicated codex-work subtree. No mount is
+created by preflight. Runtime state is only opened after this check passes.

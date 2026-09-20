@@ -5,9 +5,9 @@
 This is the source of truth for actual execution and release-note generation, backed
 by Git and linked verification/review evidence. Plans are not accomplishments.
 Application milestone: **Minimum Viable Application**. Status: **in progress**.
-Build 001: **complete** (contracts, validation and compatibility evidence).
-Builds 002–008: **pending**. No durable worker, polling, review engine or notifications
-are implemented or activated yet. See the Build 001 evidence below.
+Builds 001–002: **complete** (contracts, durable scheduler/store, operator controls and metadata).
+Builds 003–008: **pending**. Intake, implementation/review coordination and notification
+delivery are not implemented or activated yet. See the Build 001 evidence below.
 
 ## Entry contract
 
@@ -224,3 +224,79 @@ Build 008. UUID example is a placeholder until real mount preflight is configure
 No claim of persistent mounting, service deployment, production activation, automated
 reviews or MVA completion. Next: Build 002 real transactional store, global scheduler
 limits, operator controls and read-only metadata. One milestone PR will hold all builds.
+
+## Build 002 execution contract (in progress)
+
+Continue feat/mva-workflow-engine and milestone PR #3 from Build 001 9e56b53.
+Acceptance: real SQLite migrations preserve registry/jobs/events/attempts/outbox;
+project defaults seed idempotently without changing operator settings. Transactional
+claims enforce one global job/turn across projects and processes. Leases fence every
+worker mutation; expiry never implies remote termination. Operator pause/resume,
+status/inspect, cancellation and reasoned blocked-job retry persist across restart.
+External-operation intents must survive a crash and block unsafe automatic retry.
+Read-only authenticated Unix-socket metadata must be redacted, timestamped and honest
+about empty/paused/blocked/stale states. Verify the expected external mount before
+opening runtime SQLite; do not create fallback state when the mount is absent.
+
+Verification: tests-first real-store assertions, two independent Node processes
+contending for different queued projects, fake-clock lease/deadline tests, killed
+worker/reopen with fake external adapter and retained intent, spawned CLI workflows,
+actual HTTP-over-Unix auth/read-only/redaction checks. Tests use isolated temporary
+SQLite files; real CLI acceptance uses a disposable subtree on the verified external
+ext4 UUID c6d768c3-187e-43b0-b14e-cb6c659d06f7. No production service activation.
+
+### Build 002 results and exit gate
+
+Implemented schema v1 migration and reopen, preserved project settings, repository-
+scoped generations, atomic global lease/turn claims, fencing, append-only events,
+attempts/budget counters, persisted retry deadlines, operation/notification intents,
+cooperative scheduler cancellation, operator CLI, storage preflight and read-only
+HTTP-over-Unix metadata. Metadata uses one read transaction and fixed safe blocker
+messages; source poll age is distinct from snapshot age. No production worker enabled.
+
+Red evidence:
+- `node --test test/integration/store.test.mjs` against behavioral placeholders:
+  exit 1, 0/11 passing; persistence/idempotence/claims/lease/state checks failed.
+- Metadata HTTP/projection placeholders: exit 1, 0/2 passing (missing fields and
+  unauthenticated request incorrectly returned 200).
+- Storage placeholder: exit 1, 0/1 passing; absent mount was wrongly accepted.
+  Doctor CLI cycle: exit 1, 3/4 passing; doctor was not yet an implemented command.
+- Store+Scheduler retry/outbox/cancellation additions: exit 1, 11/17 passing;
+  deadlines, counters, notification intents and cancellation were unimplemented.
+- Boundary regression cycle: exit 1, 16/19 passing; pending notifications did not
+  reserve execution, cancellation allowed new intents and dangling symlinks passed.
+  Corrected all three before the full green check.
+
+Corrections honestly recorded: the first store green attempt passed 10/11; the last
+failure was case-sensitive matching of the turn-identity diagnostic, corrected to a
+clear active-turn message. The first live operator rehearsal failed preflight because
+this account cannot write the mount top level, although codex-work is writable.
+Retained UUID/device/rw/symlink checks and verified writability at the configured root
+or nearest existing parent; the same live rehearsal then passed. No guard was disabled.
+
+Green evidence: npm run check passes 26 unit, 29 integration and 4 spawned CLI tests
+(no skips); final post-format/check results are recorded on PR #3. Two separate Node
+processes raced for two project jobs and only one received a lease. A fixture worker
+was SIGKILLed with a pending external intent; reopen preserved pause, attempts,
+ownership and intent, and did not start replacement work. Fake-clock tests proved
+lease fencing and no early retry. Actual Unix HTTP tests checked unauthorized 401,
+unknown-project 404, mutation 405, redaction, timestamps and no writes from reads.
+
+Live command: node scripts/rehearse-operator.mjs /media/talaniz/postgresdata
+c6d768c3-187e-43b0-b14e-cb6c659d06f7. Exit 0; doctor, status, persistent pause/resume,
+queued cancellation, reasoned blocked retry and redacted inspect all passed.
+Foreground metadata returned both defaults to authenticated reads and rejected bad
+auth; socket mode was 0600. Wrong UUID failed without creating the configured root.
+Disposable subtree, token and server were cleaned up; productionChanged=false.
+
+Refactor: formatted the new store/metadata/storage/scheduler and CLI modules using
+Prettier 3.6.2 without changing package dependencies; rerun all checks after formatting.
+The database module owns transactions; public projection, filesystem preflight and
+scheduler responsibilities remain separate. Build 001's compatibility evidence remains
+applicable; no unrelated live agent turn was rerun.
+
+Limitations: automated reconciliation of expired leases/ambiguous remote results is
+Build 007; current behavior explicitly reserves/blocks them. No GitHub issue intake,
+production service, app implementation pipeline, automated reviewer or DOOM page exists
+yet. The scheduler is exercised with fake external adapters. Next gate: Build 003
+maintainer-authorized two-repository polling with lifecycle/revocation and fixture evidence.
