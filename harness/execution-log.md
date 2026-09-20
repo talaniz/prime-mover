@@ -122,3 +122,23 @@ evidence. The Drive plan was edited in place to match the defaults, Projects pag
 build ownership, cross-repository delivery and new MVA-8 criterion. No application
 code/tests were run or claimed complete. Named-role selection is unavailable here;
 fresh independent reviewers receive the checked-in role instructions as fallback.
+
+### Planning amendment reviews and release notes
+
+PR: https://github.com/talaniz/prime-mover/pull/2
+Reviewed planning SHA: `61ccf4686841300c45e85727c53c2322728774c3`.
+Independent code reviewer /root/code_review signed off with no actionable findings:
+https://github.com/talaniz/prime-mover/pull/2#issuecomment-5752329631
+Distinct documentation-workflow E2E reviewer /root/e2e_review signed off after all
+seven operator scenarios, build ownership and cross-repository/failure walkthroughs:
+https://github.com/talaniz/prime-mover/pull/2#issuecomment-5752340364
+Both reviewers independently checked documentation links, role TOML and whitespace;
+E2E also checked local identities and the original clean main checkout. Main task
+verified both reports and matching SHAs; no blockers remain in the planning scope.
+Drive readback confirmed one tab, 13 heading sections and ordered MVA-7/MVA-8 with the
+new requirements present and obsolete single-repository wording removed.
+
+Generated release-notes/default-projects-metadata-plan.md from this evidence. Both
+reviewers must revalidate the notes commit on GitHub before readiness. No application
+or browser test results are claimed. Application builds remain pending; no merge,
+deployment or live DOOM change occurred. PR reports no automated status checks.
