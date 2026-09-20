@@ -173,3 +173,36 @@ releasing them. Every execution/publication boundary must invoke `Intake.authori
 for fresh authorization in addition to durable worker fencing. The Build 003 live
 fixture verifies GitHub/CLI intake only; complete agent execution and recovery remain
 later gates, and no production intake service is activated.
+
+## Isolated implementation and publication (Build 004)
+
+`Worktrees` owns bare clones and deterministic per-generation branches under the
+validated external storage root. Persist the fetched main SHA before creating the
+worktree; retries verify identity and preserve existing edits. Output checks reject
+out-of-scope files, symlinks and submodules. An operator-configured Git author is
+written only to owned clones, never inferred from a developer checkout.
+
+`ExecutionAgent` persists a random threadSource before task creation and a random
+clientUserMessageId before turn creation. Lost responses reconcile exact identity
+through bounded complete history; missing/ambiguous results block. A newly created
+empty task must not be resumed before its first turn. Received turn IDs are recorded
+even if cancellation raced the response. Only authoritative idle state plus the
+recorded terminal turn releases the turn reservation. Approval events/flags remain
+visible; the worker never approves requests itself.
+
+`Implementation` persists one absolute deadline across retries. It checks local
+fencing on each observation, remote issue authorization at the configured polling
+cadence and freshly before execution/publication boundaries. Commands have durable
+intents and private artifacts. The verification subprocess has bounded time/output,
+a minimal filesystem, no host credentials and no network; trusted setup is explicitly
+network-enabled. Process/PID namespaces and abort handling stop descendants.
+
+`Publication` reconciles commits by parent/tree/message and pushes only an expected
+branch using normal fast-forward rules. Configured verification must match the exact
+head and argv. A changed remote base, dirty tree or unknown branch head blocks.
+Fresh authorization precedes each push and PR POST. Exact body/random-marker matching
+reconciles one draft PR; absence after an ambiguous POST never authorizes a repeat.
+The completed implementation releases its lease at pr-open, not ready-for-human.
+Operator publication continuation requires authoritative completed-task proof and a
+fresh authorization guard before reacquiring a fenced lease; it preserves budgets
+and unresolved intents. Generic recovery and unattended operation remain Build 007.

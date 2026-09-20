@@ -6,7 +6,7 @@ You set the objective. Prime Mover moves the pieces.
 
 ## Status
 
-Builds 001–003 implement integration contracts, durable scheduling, operator controls, project metadata and maintainer-authorized GitHub intake. The execution/review pipeline and DOOM Projects page remain under development. No unattended worker is running; nothing merges automatically.
+Builds 001–004 implement integration contracts, durable scheduling, operator controls, project metadata, maintainer-authorized GitHub intake and supervised isolated implementation through a draft PR. The review pipeline and DOOM Projects page remain under development. No unattended worker is running; nothing merges automatically.
 
 ## Intended workflow
 
@@ -39,7 +39,7 @@ The mount currently uses the existing desktop-managed path and has no `/etc/fsta
 
 ## Development and verification
 
-Build 001 establishes the TypeScript/Node toolchain, configuration contracts and compatibility probes. Build 002 adds the durable store/scheduler, operator controls and metadata service. Build 003 adds opt-in issue intake; complete issue execution remains future builds. Follow `AGENTS.md` and the user's global PR review workflow.
+Build 001 establishes the TypeScript/Node toolchain, configuration contracts and compatibility probes. Build 002 adds the durable store/scheduler, operator controls and metadata service. Build 003 adds opt-in issue intake; Build 004 adds bounded implementation and verified draft publication. Independent reviews and full recovery remain future builds. Follow `AGENTS.md` and the user's global PR review workflow.
 
 Current repository checks:
 
@@ -56,7 +56,7 @@ Credentials, environment-specific configuration, databases and their WAL/SHM sid
 Start with [harness/README.md](harness/README.md) for the eight ordered build contracts,
 test-first commit workflow, execution log, independent reviews, and release notes.
 The application milestone is in progress; Build 001 contracts and compatibility checks
-are complete. The durable store/scheduler, metadata backend and authorized intake are implemented through Build 003; the complete execution pipeline and dashboard remain under development.
+are complete. The durable store/scheduler, metadata backend and authorized intake are implemented through Build 004; the complete review pipeline and dashboard remain under development.
 
 ## Planned default projects
 
@@ -179,3 +179,43 @@ It creates fixture issues/comments, verifies authorization, deduplication, edits
 withdrawal, explicit rerun and incomplete requirements, then closes/unlabels the
 issues. Evidence and the isolated external-volume database are retained; failures
 must be inspected before another run. It refuses to overwrite existing evidence.
+
+## Supervised implementation (Build 004)
+
+After explicitly polling authorized issues, run one queued implementation job:
+
+```sh
+node dist/cli.js run-once config.local.json
+```
+
+Set operator-owned `gitAuthor.name` and `gitAuthor.email` for commits in worker-owned
+clones. Read-only commands accept older configurations without these fields; execution
+requires them. This command creates an isolated worktree, runs a bounded app-server
+turn, commits scoped output, runs configured checks and publishes one **draft** PR.
+It does not run code/E2E review or mark a PR ready. It never merges or deploys.
+
+Verification runs in bubblewrap with a private home, cleared environment and no
+network; trusted setup may use network without host credential mounts. Task execution
+uses the existing daemon's workspace sandbox and approval controls. Unresolved
+approvals and uncertain remote state retain the job reservation; do not start a
+replacement task or delete its database to retry.
+
+When implementation is proven complete but publication was blocked by a corrected
+operator configuration, an explicit continuation preserves the original task, commit
+intent and elapsed budget:
+
+```sh
+node dist/cli.js resume-publication config.local.json JOB_ID "what was corrected"
+```
+
+The continuation first verifies the recorded owned task is idle and its turn completed,
+then refreshes issue authorization. It refuses active/failed/unknown turns, changed
+contracts, cancellation and other reservations. General crash recovery remains a
+Build 007 gate. Inspect uncertain verification/PR intents rather than blindly repeat.
+
+The live fixture script creates a private fixture issue and leaves its draft PR for
+later review acceptance. It refuses an existing evidence file:
+
+```sh
+node scripts/rehearse-implementation.mjs /media/talaniz/postgresdata VERIFIED_UUID harness/build/implementation-evidence.json
+```

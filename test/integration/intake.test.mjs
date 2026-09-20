@@ -361,3 +361,13 @@ test("contract reconciliation cannot requeue an unchanged job", async (t) => {
     /changed|incomplete|reconcil/i,
   );
 });
+test("fresh authorization can be rechecked during an approval wait without treating the wait as withdrawal", async (t) => {
+  const f = setup(t);
+  await f.intake().poll();
+  const lease = f.store.claim("worker", 10000);
+  f.store.beginTurn(lease, "waiting-task", "waiting-turn");
+  f.store.transition(lease, "waiting", "approval-required");
+  const snapshot = await f.intake().authorize(lease.jobId);
+  assert.equal(snapshot.decision.runnable, true);
+  assert.equal(f.store.job(lease.jobId).cancelRequested, false);
+});

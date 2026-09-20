@@ -85,7 +85,10 @@ export class Intake {
     return snapshot;
   }
   /** Required immediately before starting a turn or publishing task output. */
-  async authorize(id: string): Promise<IntakeSnapshot> {
+  async authorize(
+    id: string,
+    options: { allowOperationalBlock?: boolean } = {},
+  ): Promise<IntakeSnapshot> {
     const job = this.store.job(id);
     if (!job || terminal.has(job.stage) || job.cancelRequested)
       throw new Error("Job is not authorized");
@@ -104,7 +107,15 @@ export class Intake {
       current.cancelRequested ||
       snapshot.decision.hash !==
         (current.snapshot as IntakeSnapshot).decision.hash ||
-      current.blockCode
+      (current.blockCode &&
+        current.blockCode !== "approval-required" &&
+        (!options.allowOperationalBlock ||
+          [
+            "contract-changed",
+            "requirements-missing",
+            "ack-pending",
+            "ack-uncertain",
+          ].includes(current.blockCode)))
     )
       throw new Error("Issue needs authorization or contract reconciliation");
     return snapshot;

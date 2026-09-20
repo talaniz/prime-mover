@@ -662,6 +662,169 @@ export class Store {
       this.event(j.id, "turn-recorded", { threadId, turnId });
     });
   }
+  setApprovalWait(lease: Lease, waiting: boolean): void {
+    this.transaction(() => {
+      const j = this.assertWorker(lease);
+      if (!j.activeTurnId)
+        throw new Error("Approval wait requires an active turn");
+      if (waiting && j.stage !== "waiting") {
+        this.run(
+          "UPDATE jobs SET resume_stage=stage,stage='waiting',block_code='approval-required',updated_at=? WHERE id=?",
+          this.now(),
+          j.id,
+        );
+        this.event(j.id, "approval-wait", {});
+      } else if (!waiting && j.stage === "waiting") {
+        const stage = this.one(
+          "SELECT resume_stage FROM jobs WHERE id=?",
+          j.id,
+        )?.resume_stage;
+        if (typeof stage !== "string" || !stages.includes(stage as JobStage))
+          throw new Error("Missing execution resume stage");
+        this.run(
+          "UPDATE jobs SET stage=?,resume_stage=NULL,block_code=NULL,updated_at=? WHERE id=?",
+          stage,
+          this.now(),
+          j.id,
+        );
+        this.event(j.id, "approval-resolved", {});
+      }
+    });
+  }
+  resumeCompletedApproval(lease: Lease): void {
+    this.transaction(() => {
+      const j = this.assertWorker(lease);
+      if (j.stage !== "waiting" || j.activeTurnId)
+        throw new Error("Approval turn is not complete");
+      const stage = this.one(
+        "SELECT resume_stage FROM jobs WHERE id=?",
+        j.id,
+      )?.resume_stage;
+      if (typeof stage !== "string" || !stages.includes(stage as JobStage))
+        throw new Error("Missing execution resume stage");
+      this.run(
+        "UPDATE jobs SET stage=?,resume_stage=NULL,block_code=NULL,updated_at=? WHERE id=?",
+        stage,
+        this.now(),
+        j.id,
+      );
+      this.event(j.id, "approval-turn-completed", {});
+    });
+  }
+  /** Operator continuation after the caller verifies the recorded remote turn completed. */
+  reclaimPublication(
+    id: string,
+    owner: string,
+    duration: number,
+    why: string,
+  ): Lease {
+    reason(why);
+    required(owner);
+    if (!Number.isSafeInteger(duration) || duration < 1)
+      throw new Error("Invalid lease duration");
+    return this.transaction(() => {
+      const j = this.job(id);
+      const ops = this.operations(id);
+      const turn = ops.find((o) => o.key === "implementation-0:turn");
+      if (
+        !j ||
+        j.stage !== "blocked" ||
+        j.cancelRequested ||
+        j.activeTurnId ||
+        j.leaseOwner ||
+        !j.activeThreadId ||
+        turn?.status !== "done" ||
+        this.one("SELECT intake_invalid FROM jobs WHERE id=?", id)
+          ?.intake_invalid
+      )
+        throw new Error("Job needs remote or contract reconciliation first");
+      if (
+        ops.some(
+          (o) =>
+            o.status === "pending" &&
+            !["commit", "push", "pull-create", "verification"].includes(o.kind),
+        )
+      )
+        throw new Error("Pending execution requires remote reconciliation");
+      if (
+        this.one(
+          "SELECT id FROM jobs WHERE lease_owner IS NOT NULL OR active_turn_id IS NOT NULL",
+        ) ||
+        this.one(
+          "SELECT job_id FROM operations WHERE status='pending' AND job_id<>?",
+          id,
+        ) ||
+        this.one("SELECT job_id FROM outbox WHERE status='pending'")
+      )
+        throw new Error("Another reservation requires reconciliation");
+      if (this.paused()) throw new Error("Intake is paused");
+      const p = this.one("SELECT * FROM projects WHERE id=?", j.projectId);
+      if (!p?.enabled || !p.configured || p.block_code)
+        throw new Error("Project is unavailable");
+      const epoch = j.leaseEpoch + 1,
+        attempt = j.attempts + 1;
+      this.run(
+        "UPDATE jobs SET stage='preparing',block_code=NULL,lease_owner=?,lease_epoch=?,lease_until=?,attempts=?,updated_at=? WHERE id=?",
+        owner,
+        epoch,
+        this.now() + duration,
+        attempt,
+        this.now(),
+        id,
+      );
+      this.run(
+        "INSERT INTO attempts VALUES (?,?,?,?,?)",
+        id,
+        attempt,
+        owner,
+        epoch,
+        this.now(),
+      );
+      this.event(id, "operator-publication-resume", {
+        reason: why,
+        owner,
+        epoch,
+      });
+      return { jobId: id, owner, epoch };
+    });
+  }
+  finishImplementation(lease: Lease, number: number): void {
+    if (!Number.isSafeInteger(number) || number < 1)
+      throw new Error("Invalid PR identity");
+    this.transaction(() => {
+      const j = this.assertWorker(lease);
+      if (j.stage !== "verifying" || j.activeTurnId || this.hasPending(j.id))
+        throw new Error("Implementation still needs reconciliation");
+      if (j.prNumber !== null && j.prNumber !== number)
+        throw new Error("PR identity changed");
+      this.run(
+        "UPDATE jobs SET stage='pr-open',pr_number=?,lease_owner=NULL,lease_until=NULL,updated_at=? WHERE id=?",
+        number,
+        this.now(),
+        j.id,
+      );
+      this.event(j.id, "implementation-pr-open", { number });
+    });
+  }
+  /** Record an already accepted remote turn even if cancellation raced its response. */
+  recordObservedTurn(lease: Lease, threadId: string, turnId: string): void {
+    required(threadId);
+    required(turnId);
+    this.transaction(() => {
+      const j = this.assertLease(lease);
+      if (j.activeTurnId === turnId && j.activeThreadId === threadId) return;
+      if (this.one("SELECT id FROM jobs WHERE active_turn_id IS NOT NULL"))
+        throw new Error("There is already an active turn");
+      this.run(
+        "UPDATE jobs SET active_thread_id=?,active_turn_id=?,updated_at=? WHERE id=?",
+        threadId,
+        turnId,
+        this.now(),
+        j.id,
+      );
+      this.event(j.id, "observed-turn-recorded", { threadId, turnId });
+    });
+  }
   finishTurn(lease: Lease, turnId: string): void {
     this.transaction(() => {
       const j = this.assertLease(lease);

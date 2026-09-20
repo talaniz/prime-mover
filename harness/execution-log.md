@@ -408,3 +408,171 @@ skipped. Includes the unchanged-job reconciliation guard, schema upgrade and HTT
 fixture. `git diff --check` exited 0. Raw final output is ignored
 `harness/build/003-final-check.txt`. The native SQLite experimental warning remains
 visible; runtime/version restrictions from Builds 001–002 are unchanged.
+
+## Build 004 execution contract (in progress)
+
+Continue the milestone branch from Build 003 `095b1da`. Build 004 must prepare
+worker-owned repository clones/worktrees at a durable base SHA; execute a bounded
+implementation task via the existing app server; verify only configured argv commands
+in an isolated environment; enforce configured output paths; commit/push and reconcile
+one draft PR. Persist intentions before branch/task/turn/push/PR side effects and
+reconcile observable state rather than blindly repeat ambiguous writes. Approval,
+failed/no-op output and unknown remote state remain explicit blockers. Neither live
+DOOM nor a running worker checkout may be changed/reloaded.
+
+Concrete verification begins with real local Git fixture repositories for both project
+identities: pinned base, deterministic branches, repeat/crash recovery, path escape,
+symlink/submodule/output-scope rejection and literal argv. Then test app-server events,
+turn history, approval/timeout/abort and crash windows, plus verification and PR gates.
+Use real local subprocess/WebSocket/HTTP boundaries where useful; mocks cannot replace
+the mandatory small live GitHub fixture implementation and generated PR. Live evidence
+must retain task/turn IDs, base/head SHAs, commands/results and PR URL. One primary
+Build 004 commit only after the complete exit gate; no partial-build commit.
+
+A read-only capability probe confirmed `/usr/bin/bwrap` can run a minimal filesystem/
+network-isolated `/usr/bin/true` on this Pi (exit 0). This supports a verification
+runner that excludes host credential directories rather than directly running changed
+repository scripts with unrestricted host access. This probe is environment evidence,
+not a substitute for meaningful behavior-test red evidence.
+
+### Build 004 foundation progress — not the build exit gate
+
+Added `Worktrees` and `runIsolated` with real Git/subprocess tests. The worktree
+manager uses worker-owned bare repositories and isolated directories, records a base
+SHA in its returned plan, derives branch names from validated project/issue/generation
+identities and preserves existing edits when reconciling branch/worktree creation.
+It checks common-repository/branch identity, base ancestry, allowed output paths,
+symlinks and no-op output. The coordinator must persist the returned plan and reuse
+it on restart; durable orchestration is not implemented by these primitives alone.
+
+The verification runner uses bubblewrap with a minimal read-only runtime, a writable
+worktree, private temporary/home directories, cleared credential environment and no
+network by default. Trusted setup can explicitly enable network without mounting
+host credentials. Commands use literal argv, bounded time/output, process-group/PID
+namespace cleanup and abort handling. Git metadata can be mounted read-only when
+needed. Tests verify real stdout/exit codes, hidden host homes/environment/secrets,
+blocked access to a host listener, timeout, output limits and pre-/mid-run abort.
+
+Observed red/green evidence:
+- `npm run build` exited 0 with the worktree stub, then real-Git tests exited 1 with
+  five failures (missing base SHA/branch, missing escape rejection). Implemented the
+  manager. An initial syntax error was caught by TypeScript; emitted JS tests alone
+  were not counted as a green build. Corrected it, rebuilt successfully, and the five
+  original cases passed. Added project-attribution/branch-tampering coverage: six
+  real-Git cases now pass, including both default project identities.
+- Verification stub built successfully, then four tests failed on missing actual
+  output, incorrectly passed exit/abort results and missing isolation evidence.
+  Implemented the runner; all four passed, then added network/output/mid-run abort
+  checks. A full run failed because the output fixture loop called asynchronous
+  stdout writes without yielding, so it timed out before flushing enough bytes.
+  Changed the fixture to synchronous writes; retained the output-limit assertion.
+  All six verification cases pass. No timeout was relabelled as output-limit success.
+- Actual configured command `npm run check`, launched through `runIsolated` with a
+  120-second limit, exited 0 in ~45 seconds (2026-09-20 21:54:25–21:55:10 UTC):
+  **47 unit + 63 integration + 4 CLI E2E = 114 passed**, no failures/skips. This also
+  proves the full test command and nested bubblewrap/Git fixtures work in the runner.
+  Scratch evidence: `harness/build/004-isolated-repo-check.txt`; initial red and
+  narrow green logs use `004-worktree-*` and `004-verification-*`. The failed initial
+  broad run remains `004-foundation-check.txt`. `git diff --check` exited 0.
+
+Installed 0.155.1 generated protocol was inspected for upcoming task orchestration:
+`thread/list` supports exact cwd and pagination; `turn/start` has
+`clientUserMessageId`, and full turn history includes userMessage.clientId. Use
+persisted correlation and authoritative history, not speculative transport retries.
+
+Build 004 remains **in progress**, with these changes intentionally uncommitted until
+its single-primary-commit gate is complete. Next: durable task/turn execution and
+approval/timeout/crash behavior, commit/push/PR reconciliation, and a real small
+fixture issue through implementation/checks/one PR. No new app-server task or GitHub
+fixture issue was created by these foundation tests, and no live checkout/service
+was changed. Builds 005–008 and independent milestone reviews remain outstanding.
+
+### Build 004 orchestration, live acceptance and completion
+
+Implemented durable app-server execution, configured verification, coherent commit/
+fast-forward push and exact-marker draft PR reconciliation. The worker records task
+and turn correlation before sends, paginates authoritative history, verifies ownership,
+and retains active/uncertain reservations. Approval requests remain waiting; failed,
+no-op, timed-out and unverified output cannot publish. `run-once` claims one already
+queued job. `resume-publication` is an explicit operator continuation only after
+completed owned-task proof and fresh issue authorization; original intents and the
+absolute job deadline survive continuation. General recovery remains Build 007.
+
+Additional red/green cycles observed during this build:
+- Initial execution-adapter tests exposed missing start/observe behavior; subsequent
+  cases reproduced cancellation racing an accepted turn, mismatched approval request
+  resolution, and a stale turn being mistaken for the currently reserved turn.
+  Fixes preserve exact ownership and terminal-state reconciliation. Lost task/turn
+  responses never cause replacement sends; ambiguous absence remains blocked.
+- Initial publication tests exposed missing commit/push/PR behavior. Real local Git
+  cases now verify coherent commit recovery, lost push acceptance, lost PR response,
+  no duplicate POST, current-head verification, dirty output and changed base guards.
+  The first advanced-base fixture used update-ref without transferring its object;
+  corrected the fixture to push the object before asserting the guard. That setup
+  error was not counted as product red evidence.
+- Five orchestration tests first failed with missing worker behavior, then passed
+  against real Git and sandboxed commands: success, failed implementation, no-op,
+  failed verification and unresolved approval. Approval wait must not be mistaken
+  for withdrawn issue authorization; intake regression coverage now confirms this.
+- Live execution exposed premature resume of a new empty task. A regression test
+  failed against that behavior; creation now uses its validated response directly.
+  Recorded tasks still reconcile through resume/history. The adapter/publication
+  follow-up suite passed 19 tests after this fix.
+- A fresh bare clone had no Git author, unlike the developer checkout. Author/config
+  tests failed before adding explicit optional configuration and owned-clone setup;
+  30 config/worktree checks then passed. Execution requires gitAuthor; older read-only
+  configs still validate. No global Git identity was changed.
+- Operator continuation was added test-first: reclaim after completed execution
+  preserves pending publication intents, requires an audited reason and rejects
+  conflicting reservations. Remote proof rejects active/failed turns without a new
+  turn/start. The execution/implementation/scheduler follow-up passed 20 tests, then
+  the additional authoritative-completion rejection case passed.
+- Final boundary tests reproduced two missing rejections when authorization was
+  withdrawn immediately before push or PR POST, plus 25 GitHub guard calls during
+  20 rapid task observations. The initial suite had 12 passes/3 failures. Publication
+  now refreshes authorization before each external mutation, before recording a new
+  send intent; active monitoring respects pollSeconds while local fencing stays
+  per-observation. The same 15-test suite then passed. Refactor review retained the
+  existing adapters and durable operations; no extra abstraction was necessary.
+
+Live fixture evidence (private owner-controlled repository, no production changes):
+- Automatic approval review initially rejected the fixture launch because destination
+  ownership was not established. Read-only GitHub evidence confirmed authenticated
+  talaniz owns/administers the private acceptance repository; the specifically scoped
+  retry was permitted. No enforcement control was bypassed.
+- Attempt 1: issue #4, job `5d09c613-42c3-4a15-98ec-5d3c0c8594ea`, empty task
+  `01a0c0e7-9d0c-7790-93e8-9ff324829064`. Premature resume failed before any turn
+  intent. Authoritative reads/listing found no persisted/loaded task. With no active
+  turn, pending send or publication, cancelled this fixture and closed/unlabelled its
+  issue; retained first-attempt evidence. It was not counted as success.
+- Attempt 2: [issue #5](https://github.com/talaniz/prime-mover-fixture/issues/5), job
+  `ef3379c4-6639-4347-882e-f0aecf89bf4e`, task
+  `01a0c0eb-997d-7851-81c1-50a697795654`, turn
+  `01a0c0eb-9a3f-7bd0-9272-22c210f61de3`. Implementation completed, but commit
+  initially failed for absent author identity (confirmed by Git author probe).
+  Configured the fixture's existing milestone identity Codex <codex@localhost> and
+  continued the preserved commit intent after authoritative completion proof. The
+  continuation returned pr-open, exit 0, without another model task/turn or budget reset.
+- Result: [draft PR #6](https://github.com/talaniz/prime-mover-fixture/pull/6), branch
+  `prime-mover/fixture/issue-5-g0`, base
+  `eee4090de3540b66a25e2ee9195ada3bbec68f00`, head
+  `1d0e91dadf89888e0946e48c09dcd56783034d51`. One commit, exactly greeting.mjs and
+  test/greeting.test.mjs. Configured `node --test test/greeting.test.mjs` passed,
+  exit 0, with head-bound private artifact. Independent sandboxed assertions passed
+  for normal/trimmed/internal-space input and TypeError for empty, whitespace, null,
+  number and array input. Verified GitHub draft/open/base/head and released local
+  lease/active turn at 2026-09-20 22:38:59 UTC. The issue/PR remain for later review
+  acceptance, not ready to merge. No live DOOM checkout or running service changed.
+
+Final Build 004 `npm run check` exited 0: **48 unit + 94 integration + 4 CLI E2E =
+146 passed**, zero failed/skipped. `git diff --check` passed. CLI E2E remains the
+configuration CLI suite; live implementation evidence above independently covers the
+new worker flow. Ignored evidence includes `004-final-check.txt`, `004-boundary-red.txt`,
+`004-boundary-green.txt`, and `004-live-implementation.json`; the latter retains the
+original blocked attempt alongside successful continuation and final acceptance.
+Node 22.23.2/SQLite experimental status and app-server 0.155.1 restrictions remain.
+
+Build 004 exit gate is complete. This is its single primary implementation commit.
+Builds 005–008, automated review/fix cycles, DOOM Projects integration, operations
+acceptance and independent milestone reviews remain outstanding. No unattended worker,
+merge, deployment or MVA completion is claimed.

@@ -7,6 +7,7 @@ export interface ProjectConfig {
 }
 export interface Config {
   schemaVersion: 1;
+  gitAuthor?: {name: string; email: string};
   storage: {mount: string; uuid: string; root: string};
   appServer: {socket: string; version: string};
   metadata: {socket: string; tokenFile: string; freshnessSeconds: number};
@@ -16,10 +17,10 @@ export interface Config {
 export const PROTOCOL_VERSION = '0.155.1';
 export const REQUIRED_METHODS = ['thread/start', 'thread/resume', 'thread/read', 'thread/turns/list', 'turn/start', 'turn/interrupt'] as const;
 function invalid(field: string): never { throw new Error(`Invalid configuration: ${field}`); }
-function record(value: unknown, keys: string[], field: string): Record<string, unknown> {
+function record(value: unknown, keys: string[], field: string, optional: string[] = []): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) invalid(field);
   const r = value as Record<string, unknown>;
-  if (Object.keys(r).some(k => !keys.includes(k)) || keys.some(k => !(k in r))) invalid(`${field} fields`);
+  if (Object.keys(r).some(k => !keys.includes(k) && !optional.includes(k)) || keys.some(k => !(k in r))) invalid(`${field} fields`);
   return r;
 }
 function text(value: unknown, field: string): string {
@@ -53,7 +54,13 @@ export function isWithin(parent: string, child: string): boolean {
   return relative !== '' && !relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative);
 }
 export function validateConfig(value: unknown): Config {
-  const c = record(value, ['schemaVersion','storage','appServer','metadata','limits','pollSeconds','projects'], 'root');
+  const c = record(value, ['schemaVersion','storage','appServer','metadata','limits','pollSeconds','projects'], 'root', ['gitAuthor']);
+  let gitAuthor: Config['gitAuthor'];
+  if (Object.hasOwn(c, 'gitAuthor')) {
+    const author = record(c.gitAuthor, ['name','email'], 'gitAuthor');
+    gitAuthor = {name:text(author.name,'gitAuthor.name'),email:text(author.email,'gitAuthor.email')};
+    if (gitAuthor.name.length>100 || /[<>]/.test(gitAuthor.name) || gitAuthor.email.length>254 || !/^[^\s<>@]+@[^\s<>@]+$/.test(gitAuthor.email)) invalid('gitAuthor');
+  }
   if (c.schemaVersion !== 1) invalid('schemaVersion');
   const s = record(c.storage, ['mount','uuid','root'], 'storage');
   const storage = {mount:absolute(s.mount,'storage.mount'),uuid:text(s.uuid,'storage.uuid'),root:absolute(s.root,'storage.root')};
@@ -84,7 +91,7 @@ export function validateConfig(value: unknown): Config {
     return {id,name:text(p.name,'project.name'),repository,baseBranch,maintainers,enabled:p.enabled,setup:commands(p.setup,'project.setup',false),verify:commands(p.verify,'project.verify',true),requiredChecks:strings(p.requiredChecks,'project.requiredChecks',false),allowedPaths};
   });
   for (const field of ['id','repository'] as const) if (new Set(projects.map(p => p[field].toLowerCase())).size !== projects.length) invalid(`duplicate project ${field}`);
-  return {schemaVersion:1,storage,appServer,metadata,limits,pollSeconds:positive(c.pollSeconds,'pollSeconds'),projects};
+  return {schemaVersion:1,...(gitAuthor ? {gitAuthor} : {}),storage,appServer,metadata,limits,pollSeconds:positive(c.pollSeconds,'pollSeconds'),projects};
 }
 export function validateCapabilities(value: {version: string; methods: readonly string[]; autoReview: boolean}): void {
   if (!value || value.version !== PROTOCOL_VERSION || value.autoReview !== true || !Array.isArray(value.methods) || REQUIRED_METHODS.some(m => !value.methods.includes(m))) {

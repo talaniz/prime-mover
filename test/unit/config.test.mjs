@@ -26,3 +26,4 @@ test('requires compatible installed protocol',()=>{assert.doesNotThrow(()=>valid
 test('missing credentials fail without echoing credential values',()=>{assert.throws(()=>validateCredentials({github:false,appServer:true,metadataToken:false}),/credentials/i);assert.doesNotThrow(()=>validateCredentials({github:true,appServer:true,metadataToken:true}));});
 test('credential shape cannot omit required access checks',()=>assert.throws(()=>validateCredentials({}),/credentials/i));
 test('all required protocol features must be explicitly present',()=>assert.throws(()=>validateCapabilities({version:'0.155.1',autoReview:true}),/protocol/i));
+test('explicit worker Git author is validated without changing older read-only configs',()=>{const c=fixture();c.gitAuthor={name:'Prime Mover',email:'prime-mover@localhost'};assert.deepEqual(validateConfig(c).gitAuthor,c.gitAuthor);c.gitAuthor.email='not an email';assert.throws(()=>validateConfig(c),/gitAuthor/);});

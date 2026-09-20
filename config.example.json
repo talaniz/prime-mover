@@ -103,5 +103,9 @@
         "config.example.json"
       ]
     }
-  ]
+  ],
+  "gitAuthor": {
+    "name": "Prime Mover",
+    "email": "prime-mover@localhost"
+  }
 }

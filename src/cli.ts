@@ -1,3 +1,9 @@
+import { randomUUID } from "node:crypto";
+import { Implementation } from "./implementation.js";
+import { Worktrees } from "./worktree.js";
+import { ExecutionAgent } from "./execution-agent.js";
+import { Publication, GitHubPulls } from "./publication.js";
+import { Scheduler } from "./scheduler.js";
 import { readFile, lstat, chmod } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { validateConfig, PROTOCOL_VERSION } from "./config.js";
@@ -20,6 +26,8 @@ const commands = [
   "retry",
   "metadata",
   "poll",
+  "run-once",
+  "resume-publication",
   "reconcile-issue",
   "rerun",
 ];
@@ -132,6 +140,79 @@ if (!command || !commands.includes(command) || !configPath) {
         if (command === "cancel") store.cancel(id, why);
         else store.retryBlocked(id, why);
         output(publicJob(store.job(id)));
+      } else if (["run-once", "resume-publication"].includes(command)) {
+        if (!config.gitAuthor)
+          throw new Error(
+            "Configure gitAuthor.name and gitAuthor.email before execution",
+          );
+        if (command === "run-once" && args.length)
+          throw new Error("Unexpected command arguments");
+        if (command === "resume-publication" && args.length < 2)
+          throw new Error("Job ID and explicit reason are required");
+        if (
+          config.appServer.version !== PROTOCOL_VERSION ||
+          execFileSync("codex", ["--version"], {
+            encoding: "utf8",
+            stdio: ["ignore", "pipe", "ignore"],
+          }).trim() !== `codex-cli ${PROTOCOL_VERSION}`
+        )
+          throw new Error(
+            "Unsupported app-server protocol version; repeat compatibility acceptance",
+          );
+        const app = new AppServer(config.appServer.socket, 30000);
+        let agent: ExecutionAgent | undefined;
+        try {
+          await app.connect();
+          agent = new ExecutionAgent(store, app);
+          const intake = new Intake(store, new GitHubClient(), {
+            pollMs: config.pollSeconds * 1000,
+            interrupt: async (threadId, turnId) => {
+              await app.request("turn/interrupt", { threadId, turnId });
+            },
+          });
+          const trees = new Worktrees(
+            config.storage.root,
+            undefined,
+            config.gitAuthor,
+          );
+          const worker = new Implementation(
+            store,
+            config,
+            intake,
+            trees,
+            agent,
+            new Publication(
+              store,
+              trees,
+              new GitHubPulls(),
+              undefined,
+              (id) => intake.authorize(id),
+            ),
+          );
+          const owner = `worker-${randomUUID()}`;
+          const scheduler = new Scheduler(store, owner);
+          let result: string;
+          if (command === "resume-publication") {
+            const id = args[0]!;
+            await agent.proveCompleted(id);
+            await intake.authorize(id, { allowOperationalBlock: true });
+            const lease = store.reclaimPublication(
+              id,
+              owner,
+              30000,
+              args.slice(1).join(" "),
+            );
+            result = await scheduler.runClaimed(lease, (context) =>
+              worker.run(context),
+            );
+          } else
+            result = await scheduler.runOnce((context) => worker.run(context));
+          output({ result });
+          if (!["idle", "pr-open"].includes(result)) process.exitCode = 1;
+        } finally {
+          agent?.close();
+          app.close();
+        }
       } else if (["poll", "reconcile-issue", "rerun"].includes(command)) {
         const app = new AppServer(config.appServer.socket);
         let connected = false;

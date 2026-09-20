@@ -19,6 +19,13 @@ export class Scheduler {
   ): Promise<string> {
     const lease = this.store.claim(this.owner, this.leaseMs);
     if (!lease) return "idle";
+    return this.runClaimed(lease, handler);
+  }
+  async runClaimed(
+    lease: Lease,
+    handler: (context: WorkContext) => Promise<void>,
+  ): Promise<string> {
+    this.store.assertWorker(lease);
     const abort = new AbortController();
     const context: WorkContext = {
       lease,
