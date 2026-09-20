@@ -2,7 +2,7 @@
 
 Milestone: **Minimum Viable Application** (the only milestone).
 Dependency: Harness preparation baseline.
-Status: **pending**; committing this contract does not execute it.
+Status: **complete**; see Build 001 results in ../execution-log.md for observed evidence.
 Primary implementation commit trailer: `Build: 001`.
 
 ## Scope and deliverables

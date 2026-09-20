@@ -39,7 +39,7 @@ The mount currently uses the existing desktop-managed path and has no `/etc/fsta
 
 ## Development and verification
 
-No application runtime, dependency manager, database schema, or build/test commands have been selected yet. Future implementation PRs must add runnable tests and document their actual commands. Follow `AGENTS.md` and the user's global PR review workflow.
+Build 001 establishes the TypeScript/Node toolchain, configuration contracts and compatibility probes. The durable worker and database schema remain future builds. Follow `AGENTS.md` and the user's global PR review workflow.
 
 Current repository checks:
 
@@ -55,7 +55,8 @@ Credentials, environment-specific configuration, databases and their WAL/SHM sid
 
 Start with [harness/README.md](harness/README.md) for the eight ordered build contracts,
 test-first commit workflow, execution log, independent reviews, and release notes.
-The application milestone has not started; this harness is preparation only.
+The application milestone is in progress; Build 001 contracts and compatibility checks
+are complete. The durable worker and dashboard remain under development.
 
 ## Planned default projects
 
@@ -63,3 +64,33 @@ The MVA will track `talaniz/prime-mover` and `talaniz/doom-control` (DOOM Dashbo
 with one active job globally. A read-only Projects page in the existing DOOM Dashboard
 will show tracking and job metadata. See [the contract](harness/project-metadata.md).
 These defaults and the view are planned, not implemented or activated.
+
+## Build 001 development commands
+
+Use Node 22.23.2 and npm 10.9.8 (`.node-version`, `package-lock.json`).
+
+```sh
+npm ci
+npm run build
+npm run lint
+npm test
+npm run test:integration
+npm run test:e2e
+npm run check
+node dist/cli.js config-check config.example.json
+```
+
+The current E2E command exercises the actual configuration CLI, not the future
+complete worker. Integration tests exercise local Unix WebSockets and SQLite WAL.
+See [architecture and contracts](docs/architecture.md) for schema, compatibility,
+credential boundaries and the read-only metadata API. Runtime intake is not enabled.
+
+The explicitly invoked live app-server probe uses an isolated external-volume folder
+and a local ignored evidence file to retain task/turn IDs across observation retries:
+
+```sh
+node scripts/probe-app-server.mjs SOCKET ISOLATED_CWD EVIDENCE_JSON
+```
+
+Do not delete its evidence to retry an ambiguous operation. Reconcile the existing
+task first. The probe cannot substitute for the later supervised MVA rehearsal.

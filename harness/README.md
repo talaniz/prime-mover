@@ -2,7 +2,8 @@
 
 One milestone: **Minimum Viable Application (MVA)**. One application implementation
 branch and PR hold all build commits and subsequent review fixes/release notes.
-This harness setup is a preparation PR; all application builds remain pending.
+Application execution is in progress: Build 001 is complete; builds 002–008 remain pending.
+The execution log contains actual evidence and remaining gates.
 
 ## Layout
 

@@ -34,3 +34,5 @@ coverage/
 # Local harness output; keep the usage instructions versioned.
 /harness/build/*
 !/harness/build/README.md
+
+/dist/

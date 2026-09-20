@@ -4,9 +4,10 @@
 
 This is the source of truth for actual execution and release-note generation, backed
 by Git and linked verification/review evidence. Plans are not accomplishments.
-Application milestone: **Minimum Viable Application**. Status: **not started**.
-Builds 001–008: **pending**. No worker, polling, database, review engine, or notifications
-are implemented. This branch prepares the harness only.
+Application milestone: **Minimum Viable Application**. Status: **in progress**.
+Build 001: **complete** (contracts, validation and compatibility evidence).
+Builds 002–008: **pending**. No durable worker, polling, review engine or notifications
+are implemented or activated yet. See the Build 001 evidence below.
 
 ## Entry contract
 
@@ -142,3 +143,84 @@ Generated release-notes/default-projects-metadata-plan.md from this evidence. Bo
 reviewers must revalidate the notes commit on GitHub before readiness. No application
 or browser test results are claimed. Application builds remain pending; no merge,
 deployment or live DOOM change occurred. PR reports no automated status checks.
+
+## Build 001 execution contract (in progress)
+
+Milestone branch: feat/mva-workflow-engine, based on origin/main fe3352b.
+User authorized transferring the existing engineering-priorities AGENTS.md addition
+onto this branch; it is preserved. Main was fast-forwarded before branching.
+
+Acceptance/verification: typed validation rejects malformed project identities,
+unsafe/non-absolute storage paths, missing command contracts/maintainers, duplicate
+projects and unsafe concurrency; defaults contain both projects. Preflight rejects
+missing GitHub/app-server credentials or unsupported installed protocol. Transport
+contract tests use an actual local WebSocket server and recorded installed protocol
+shapes for initialize, requests, approvals, disconnects, timeouts and recovery reads.
+Use npm test for config/state classification, npm run test:integration for transport
+and real SQLite, npm run test:e2e for a spawned operator diagnostic, npm run check for
+all offline checks. A separate explicit live probe must complete a harmless isolated
+app-server turn and reconnect/read/resume it, and GitHub probes must identify both
+repositories and authorized maintainer. Never treat mocks as live acceptance.
+
+Initial environment: Node 22.23.2, npm 10.9.8, Codex CLI 0.155.1, ARM Pi; built-in
+node:sqlite opens successfully with SQLite 3.51.3 (experimental API warning retained).
+External ext4 is mounted read/write. GitHub reports push/admin permission for both
+configured repositories. No runtime worker or intake has been activated.
+
+### Build 001 results and exit gate
+
+Scope delivered: locked Node/TypeScript/ws toolchain, typed configuration validator,
+two-project config example, adapter/metadata types, tested app-server transport,
+configuration CLI, issue/PR templates and architecture/credential documentation.
+AGENTS engineering priorities are included as explicitly authorized by the owner.
+
+Red evidence (all executed before the corresponding implementation):
+- `npm test`, config skeleton: exit 1; 1 passed / 19 failed. Invalid path, duplicate
+  identity, unsafe concurrency and missing credentials/protocol checks failed with
+  missing expected exceptions; this was missing behavior, not a broken environment.
+- `npm test`, protocol skeleton: exit 1; 20 passed / 2 failed (sandbox/approval options
+  absent, active/unknown task state incorrectly classified idle).
+- `npm run test:integration`, transport skeleton: exit 1; 0 passed / 5 failed
+  (missing RPC result, error/timeout/disconnect rejection and approval event).
+- `npm run test:e2e`, CLI skeleton: exit 1; 0 passed / 3 failed (no JSON output,
+  invalid configuration and unknown commands incorrectly exited successfully).
+- `npm test`, malformed preflight inputs: exit 1; 22 passed / 2 failed (missing
+  credential fields accepted and missing method list raised an unhelpful TypeError).
+
+Green: `npm run check` passes strict TypeScript build/lint, 24 unit tests, 6 actual
+Unix-WebSocket/SQLite integration tests and 3 spawned CLI E2E tests, no skips. The
+first scaffold check had zero E2E tests; it was not accepted as CLI evidence and was
+replaced by the failing then passing operator scenarios above. SQLite WAL transaction
+visibility, rollback, reopen and integrity were observed with the real driver.
+Refactor assessment: keep small config, transport, CLI and types modules; no further
+behavior-preserving refactor needed. Documentation links, role TOML and whitespace pass.
+
+Live app-server acceptance (existing daemon, isolated external-volume probe directory):
+- `node scripts/probe-app-server.mjs SOCKET ISOLATED_CWD EVIDENCE_JSON` completed the
+  harmless PRIME_MOVER_PROBE_OK turn, reconnected/read history/resumed the same task.
+- Task: 01a0c08c-b669-72f0-bc3d-26b964bd4f1a.
+  Successful turn: 01a0c08c-b6d4-7521-93d9-0011ea51a60a.
+- Resume response verified approvalPolicy=on-request, approvalsReviewer=auto_review,
+  sandbox.type=workspaceWrite; idle state observed. Approval requests are tested as
+  visible waits in the transport fixture; no real privileged approval was requested.
+- A second harmless counting turn 01a0c091-ba06-7700-af9e-b4ab03adc421 exercised
+  interruption. Immediate turn/interrupt returned RPC -32600. We did not infer it
+  stopped: thread/read and thread/turns/list confirmed active/inProgress. Reconnecting,
+  thread/resume, then turn/interrupt for that same ID succeeded; thread/turns/list
+  confirmed interrupted. No replacement task/turn was started after the rejection.
+  Keep this race/reattachment case in subsequent recovery tests.
+- Installed generated 0.155.1 types confirm lifecycle/history/interrupt methods and
+  approval flags. Full history for a job must paginate in later coordinator builds.
+
+GitHub read-only acceptance: `gh api user` identifies talaniz; repository APIs report
+push/admin access to talaniz/prime-mover and talaniz/doom-control, both default main.
+Collaborator permission endpoints independently return admin for talaniz on both.
+Label listing works; codex-ready does not yet exist and must be provisioned explicitly
+for supervised intake fixtures before Build 003 live verification. No issues were run.
+
+Limitations: CLI E2E is configuration-only, not complete worker/dashboard acceptance.
+Metadata API/registry implementation is Build 002 and DOOM integration is required by
+Build 008. UUID example is a placeholder until real mount preflight is configured.
+No claim of persistent mounting, service deployment, production activation, automated
+reviews or MVA completion. Next: Build 002 real transactional store, global scheduler
+limits, operator controls and read-only metadata. One milestone PR will hold all builds.

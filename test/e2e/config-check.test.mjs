@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {spawnSync} from 'node:child_process';
+import {mkdtempSync,writeFileSync,rmSync} from 'node:fs';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
+const run=(...args)=>spawnSync(process.execPath,['dist/cli.js',...args],{encoding:'utf8'});
+test('operator validates default project configuration without activating worker',()=>{const r=run('config-check','config.example.json');assert.equal(r.status,0);const body=JSON.parse(r.stdout);assert.deepEqual(body.projects,['prime-mover','doom-dashboard']);assert.equal(body.executionStarted,false);});
+test('invalid configuration produces nonzero redacted actionable diagnostic',()=>{const dir=mkdtempSync(join(tmpdir(),'pm-cli-'));try{const p=join(dir,'bad.json');writeFileSync(p,JSON.stringify({secret:'do-not-echo-this'}));const r=run('config-check',p);assert.equal(r.status,1);assert.match(r.stderr,/configuration/i);assert.doesNotMatch(r.stderr,/do-not-echo-this/);}finally{rmSync(dir,{recursive:true,force:true});}});
+test('unknown commands fail and show usage',()=>{const r=run('launch-everything');assert.equal(r.status,2);assert.match(r.stderr,/Usage/);});

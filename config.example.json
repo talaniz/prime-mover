@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "storage": {
+    "mount": "/media/talaniz/postgresdata",
+    "uuid": "REPLACE_WITH_VERIFIED_FILESYSTEM_UUID",
+    "root": "/media/talaniz/postgresdata/codex-work"
+  },
+  "appServer": {
+    "socket": "/home/palpatine/.codex/app-server-control/app-server-control.sock",
+    "version": "0.155.1"
+  },
+  "metadata": {
+    "socket": "/media/talaniz/postgresdata/codex-work/data/prime-mover/metadata.sock",
+    "tokenFile": "/home/palpatine/.config/prime-mover/metadata-token",
+    "freshnessSeconds": 120
+  },
+  "limits": {
+    "activeJobs": 1,
+    "activeTurns": 1,
+    "transportAttempts": 3,
+    "correctionCycles": 3,
+    "turnSeconds": 3600,
+    "jobSeconds": 21600
+  },
+  "pollSeconds": 60,
+  "projects": [
+    {
+      "id": "prime-mover",
+      "name": "Prime Mover",
+      "repository": "talaniz/prime-mover",
+      "baseBranch": "main",
+      "maintainers": [
+        "talaniz"
+      ],
+      "enabled": true,
+      "setup": [
+        [
+          "npm",
+          "ci"
+        ]
+      ],
+      "verify": [
+        [
+          "npm",
+          "run",
+          "check"
+        ]
+      ],
+      "requiredChecks": [],
+      "allowedPaths": [
+        "src",
+        "test",
+        "scripts",
+        "docs",
+        "harness",
+        ".github",
+        "README.md",
+        "AGENTS.md",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.json",
+        ".gitignore",
+        ".node-version"
+      ]
+    },
+    {
+      "id": "doom-dashboard",
+      "name": "DOOM Dashboard",
+      "repository": "talaniz/doom-control",
+      "baseBranch": "main",
+      "maintainers": [
+        "talaniz"
+      ],
+      "enabled": true,
+      "setup": [
+        [
+          "npm",
+          "ci"
+        ]
+      ],
+      "verify": [
+        [
+          "npm",
+          "run",
+          "check"
+        ],
+        [
+          "npm",
+          "test"
+        ]
+      ],
+      "requiredChecks": [],
+      "allowedPaths": [
+        "server.mjs",
+        "auth.mjs",
+        "dist",
+        "test",
+        "scripts",
+        "README.md",
+        "AGENTS.md",
+        "package.json",
+        "package-lock.json",
+        "config.example.json"
+      ]
+    }
+  ]
+}

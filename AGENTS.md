@@ -1,5 +1,16 @@
 # Prime Mover repository instructions
 
+## Engineering and product priorities
+
+Security, clean code, practical deployment choices and an excellent operator experience are core priorities for Prime Mover.
+
+- **Security:** Preserve explicit issue authorization, repository isolation and least privilege across GitHub, app-server and filesystem boundaries. Keep secrets out of metadata and evidence; fail safely when authorization or external state is uncertain.
+- **Clean code:** Keep adapters, durable state transitions, scheduling and review coordination cohesive and testable. Prefer explicit contracts and small, readable components over speculative generalization; test observable behavior and recovery guarantees.
+- **Deployment readiness:** Choose simple, reliable designs compatible with the Pi and existing services. Include configuration validation, persistent storage, useful diagnostics, recovery and upgrade/rollback procedures in the relevant build contracts. Favor incremental, verifiable progress toward operation without weakening milestone gates or authorizing deployment.
+- **Operator experience:** Make project and job status understandable, timely and actionable. Show progress, blockers, stale or unavailable data, and recovery options honestly. Design CLI and dashboard interactions for clarity, accessibility and responsiveness, and verify complete workflows without disrupting DOOM.
+
+Record material tradeoffs in the relevant design or PR. These priorities guide the authorized scope; they do not expand it or replace the existing acceptance, review and human-control requirements.
+
 ## Scope and sources of truth
 
 Prime Mover is the durable workflow worker behind DOOM. The runtime is not implemented yet.
@@ -82,11 +93,12 @@ credentials, environments, or unperformed checks are blockers, not passes.
 
 ## Commands and evidence
 
-This preparation PR has no application test runner. Check documentation paths, parse
+Build 001 adds npm run check (strict TypeScript, unit, integration and CLI E2E).
+Live acceptance remains separate and mandatory at the relevant build gates.
+For documentation changes, check documentation paths, parse
 agent TOML with Python 3.11+ `tomllib`, inspect all build contracts and workflow scenarios,
-and run `git diff --check`. Build 001 must establish and document actual runtime/test
-commands before any application behavior is claimed. Subsequent builds use those
-commands; proposed npm commands in the plan are not currently runnable checks.
+and run `git diff --check`. Subsequent builds extend the established npm commands; never call narrow CLI
+E2E proof of the complete MVA. Record live evidence separately.
 Keep durable redacted summaries in the execution log and PR; temporary raw artifacts
 belong under `harness/build/` and are ignored. Never rely solely on disappearing local
 output for milestone evidence. Record failed attempts and corrections honestly.
