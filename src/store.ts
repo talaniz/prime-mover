@@ -105,7 +105,7 @@ export class Store {
       );
       this.transaction(() => {
         const version = this.one("PRAGMA user_version")?.user_version;
-        if (version !== 0 && version !== 1)
+        if (version !== 0 && version !== 1 && version !== 2)
           throw new Error(
             "Unsupported database schema version; restore a compatible worker",
           );
@@ -149,6 +149,14 @@ export class Store {
             kind TEXT NOT NULL, payload TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
             remote_id TEXT, created_at INTEGER NOT NULL, UNIQUE(job_id,kind));
           PRAGMA user_version=1;
+        `);
+        if (version === 0 || version === 1)
+          this.db.exec(`
+          CREATE TABLE intake_polls (project_id TEXT PRIMARY KEY REFERENCES projects(id), next_at INTEGER NOT NULL DEFAULT 0, failures INTEGER NOT NULL DEFAULT 0);
+          ALTER TABLE jobs ADD COLUMN intake_invalid INTEGER NOT NULL DEFAULT 0;
+          CREATE TABLE intake_acks (job_id TEXT PRIMARY KEY REFERENCES jobs(id), marker TEXT NOT NULL UNIQUE, body TEXT NOT NULL, actor TEXT NOT NULL,
+            state TEXT NOT NULL CHECK(state IN ('pending','sending','done')), remote_id TEXT);
+          PRAGMA user_version=2;
         `);
       });
     } catch (error) {
@@ -260,6 +268,8 @@ export class Store {
     issue: number,
     snapshot: unknown,
     generation = 0,
+    initialBlock: string | null = null,
+    rerun?: { from: string; reason: string },
   ): string {
     if (
       !Number.isSafeInteger(issue) ||
@@ -289,6 +299,21 @@ export class Store {
         )
       )
         throw new Error("Issue already has an active generation");
+      if (rerun) {
+        reason(rerun.reason);
+        const previous = this.job(rerun.from);
+        if (
+          !previous ||
+          previous.projectId !== projectId ||
+          previous.issue !== issue ||
+          previous.generation + 1 !== generation ||
+          !terminal.has(previous.stage) ||
+          previous.leaseOwner ||
+          previous.activeTurnId ||
+          this.hasPending(previous.id)
+        )
+          throw new Error("Prior generation needs reconciliation before rerun");
+      }
       const id = randomUUID();
       this.run(
         "INSERT INTO jobs(id,project_id,repository,issue,generation,snapshot,stage,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
@@ -302,8 +327,174 @@ export class Store {
         this.now(),
         this.now(),
       );
-      this.event(id, "queued", { generation });
+      if (initialBlock)
+        this.run(
+          "UPDATE jobs SET stage='blocked',block_code=? WHERE id=?",
+          initialBlock,
+          id,
+        );
+      this.event(id, initialBlock ? "intake-blocked" : "queued", {
+        generation,
+        blockCode: initialBlock,
+      });
+      if (rerun)
+        this.event(id, "operator-rerun", {
+          from: rerun.from,
+          reason: rerun.reason,
+        });
       return id;
+    });
+  }
+  pollState(projectId: string): { nextAt: number; failures: number } {
+    const r = this.one(
+      "SELECT * FROM intake_polls WHERE project_id=?",
+      projectId,
+    );
+    return {
+      nextAt: Number(r?.next_at ?? 0),
+      failures: Number(r?.failures ?? 0),
+    };
+  }
+  recordPoll(
+    projectId: string,
+    checkpoint: string | null,
+    code: string | null,
+    nextAt: number,
+  ): void {
+    this.transaction(() => {
+      this.updatePoll(projectId, checkpoint, code);
+      this.run(
+        `INSERT INTO intake_polls VALUES (?,?,?) ON CONFLICT(project_id) DO UPDATE SET next_at=excluded.next_at,failures=excluded.failures`,
+        projectId,
+        nextAt,
+        code ? this.pollState(projectId).failures + 1 : 0,
+      );
+    });
+  }
+  invalidateIntake(id: string, code: string): void {
+    this.transaction(() => {
+      const j = this.job(id);
+      if (!j || terminal.has(j.stage)) return;
+      this.run(
+        "UPDATE jobs SET intake_invalid=1,stage='blocked',block_code=?,updated_at=? WHERE id=?",
+        code,
+        this.now(),
+        id,
+      );
+      if (j.blockCode !== code) this.event(id, "intake-invalidated", { code });
+    });
+  }
+  reconcileIntake(id: string, snapshot: unknown, why: string): void {
+    reason(why);
+    this.transaction(() => {
+      const j = this.job(id);
+      if (
+        !j ||
+        terminal.has(j.stage) ||
+        j.leaseOwner ||
+        j.activeTurnId ||
+        j.cancelRequested ||
+        this.hasPending(id)
+      )
+        throw new Error("Job needs remote reconciliation first");
+      if (
+        j.stage !== "blocked" ||
+        (!this.one("SELECT intake_invalid FROM jobs WHERE id=?", id)
+          ?.intake_invalid &&
+          j.blockCode !== "requirements-missing")
+      )
+        throw new Error(
+          "Only changed or incomplete contracts can be reconciled",
+        );
+      const ack = this.intakeAck(id);
+      if (!ack || ack.state !== "done")
+        throw new Error("Acknowledgment needs reconciliation first");
+      this.run(
+        "UPDATE jobs SET snapshot=?,stage='queued',block_code=NULL,intake_invalid=0,updated_at=? WHERE id=?",
+        json(snapshot),
+        this.now(),
+        id,
+      );
+      this.event(id, "operator-contract-reconciled", { reason: why });
+    });
+  }
+  intakeAck(id: string): {
+    marker: string;
+    body: string;
+    actor: string;
+    state: string;
+    remoteId: string | null;
+  } | null {
+    const r = this.one("SELECT * FROM intake_acks WHERE job_id=?", id);
+    return r
+      ? {
+          marker: String(r.marker),
+          body: String(r.body),
+          actor: String(r.actor),
+          state: String(r.state),
+          remoteId: r.remote_id as string | null,
+        }
+      : null;
+  }
+  prepareIntakeAck(id: string, body: string, actor: string): void {
+    this.transaction(() => {
+      if (this.intakeAck(id)) return;
+      const marker = `<!-- prime-mover-intake:${randomUUID()} -->`;
+      this.run(
+        "INSERT INTO intake_acks VALUES (?,?,?,?,'pending',NULL)",
+        id,
+        marker,
+        `${body}\n\n${marker}`,
+        actor,
+      );
+      this.event(id, "intake-ack-intent", { marker, actor });
+    });
+  }
+  startIntakeAck(id: string): boolean {
+    return this.transaction(() => {
+      if (this.intakeAck(id)?.state !== "pending") return false;
+      this.run("UPDATE intake_acks SET state='sending' WHERE job_id=?", id);
+      this.event(id, "intake-ack-sending", {});
+      return true;
+    });
+  }
+  finishIntakeAck(id: string, remoteId: string): void {
+    required(remoteId);
+    this.transaction(() => {
+      const ack = this.intakeAck(id);
+      if (!ack || (ack.remoteId && ack.remoteId !== remoteId))
+        throw new Error("Acknowledgment identity mismatch");
+      this.run(
+        "UPDATE intake_acks SET state='done',remote_id=? WHERE job_id=?",
+        remoteId,
+        id,
+      );
+      if (ack.state !== "done")
+        this.event(id, "intake-ack-confirmed", { remoteId });
+    });
+  }
+  releaseIntake(id: string): void {
+    this.transaction(() => {
+      const j = this.job(id);
+      if (
+        !j ||
+        j.cancelRequested ||
+        this.intakeAck(id)?.state !== "done" ||
+        this.one("SELECT intake_invalid FROM jobs WHERE id=?", id)
+          ?.intake_invalid
+      )
+        return;
+      if (
+        j.stage === "blocked" &&
+        ["ack-pending", "ack-uncertain"].includes(j.blockCode ?? "")
+      ) {
+        this.run(
+          "UPDATE jobs SET stage='queued',block_code=NULL,updated_at=? WHERE id=?",
+          this.now(),
+          id,
+        );
+        this.event(id, "intake-authorized", {});
+      }
     });
   }
   private decode(r: Row): Job {
@@ -367,7 +558,7 @@ export class Store {
         return null;
       const r = this.one(
         `SELECT j.id FROM jobs j JOIN projects p ON p.id=j.project_id
-        WHERE (j.stage='queued' OR (j.stage='waiting' AND j.retry_at<=?)) AND j.cancel_requested=0 AND p.enabled=1 AND p.configured=1 AND p.block_code IS NULL
+        WHERE (j.stage='queued' OR (j.stage='waiting' AND j.retry_at<=?)) AND j.cancel_requested=0 AND j.intake_invalid=0 AND p.enabled=1 AND p.configured=1 AND p.block_code IS NULL
         ORDER BY p.last_claim_at,j.created_at,j.id LIMIT 1`,
         this.now(),
       );
@@ -427,6 +618,7 @@ export class Store {
   transition(lease: Lease, stage: JobStage, blockCode?: string): void {
     this.transaction(() => {
       const j = this.assertLease(lease);
+      if (!["blocked", "cancelled"].includes(stage)) this.assertWorker(lease);
       if (
         !stages.includes(stage) ||
         terminal.has(j.stage) ||
@@ -457,8 +649,7 @@ export class Store {
     required(threadId);
     required(turnId);
     this.transaction(() => {
-      const j = this.assertLease(lease);
-      if (j.cancelRequested) throw new Error("Cancellation requested");
+      const j = this.assertWorker(lease);
       if (this.one("SELECT id FROM jobs WHERE active_turn_id IS NOT NULL"))
         throw new Error("There is already an active turn");
       this.run(
@@ -523,6 +714,22 @@ export class Store {
       const j = this.job(id);
       if (!j || j.stage !== "blocked")
         throw new Error("Only blocked jobs can be retried");
+      if (
+        this.one("SELECT intake_invalid FROM jobs WHERE id=?", id)
+          ?.intake_invalid
+      )
+        throw new Error("Intake contract needs reconciliation before retry");
+      if (
+        [
+          "contract-changed",
+          "requirements-missing",
+          "ack-pending",
+          "ack-uncertain",
+        ].includes(j.blockCode ?? "")
+      )
+        throw new Error(
+          "Intake contract or acknowledgment needs reconciliation before retry",
+        );
       if (
         j.leaseOwner ||
         j.activeTurnId ||
@@ -611,6 +818,19 @@ export class Store {
   assertWorker(lease: Lease): Job {
     const j = this.assertLease(lease);
     if (j.cancelRequested) throw new Error("Cancellation requested");
+    if (
+      this.one("SELECT intake_invalid FROM jobs WHERE id=?", j.id)
+        ?.intake_invalid
+    )
+      throw new Error("Intake contract needs reconciliation");
+    const project = this.one(
+      "SELECT enabled,configured,block_code FROM projects WHERE id=?",
+      j.projectId,
+    );
+    if (!project?.enabled || !project.configured || project.block_code)
+      throw new Error(
+        "Project is unavailable; reconcile authorization before work",
+      );
     return j;
   }
   private hasPending(id?: string): boolean {
@@ -714,9 +934,7 @@ export class Store {
       return { id, status: "pending" };
     });
   }
-  notifications(
-    id: string,
-  ): {
+  notifications(id: string): {
     id: string;
     kind: string;
     payload: unknown;

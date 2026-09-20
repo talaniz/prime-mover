@@ -137,3 +137,39 @@ SQLite WAL/SHM paths. Writability is checked at the configured root or its neare
 existing parent, not at the filesystem's root: this Pi intentionally restricts the
 mount top level while permitting the dedicated codex-work subtree. No mount is
 created by preflight. Runtime state is only opened after this check passes.
+
+
+## Authorized intake and schema 2 (Build 003)
+
+`github.ts` owns the GitHub REST adapter through the existing `gh` credential store.
+It validates returned shapes, accepts only same-endpoint GitHub next-page links,
+passes argv/JSON without a shell, bounds each subprocess to 30 seconds/8 MiB, and
+exposes redacted typed failures with rate-limit retry times. No token is returned.
+Issue authorization uses the REST label event's actor, not author/body claims; see
+[GitHub event semantics](https://docs.github.com/en/rest/using-the-rest-api/issue-event-types).
+
+`intake-policy.ts` hashes title/body and extracts the four required contract sections;
+fenced text and conflicting duplicate headings cannot supply a valid contract.
+`intake.ts` re-fetches each discovered issue and all bounded event pages, maintains
+independent project polling, and rechecks existing work regardless of discovery labels.
+Discovery checkpoints advance only after page items are durable; a full scan repeats
+after the last page to tolerate pagination movement/eventual consistency. Five discovery
+pages per repository/round and 100 event/comment pages per read bound work; excess
+or cyclic evidence pages block rather than infer authorization.
+
+Schema 2 migrates schema 1 atomically, retaining existing jobs/events/operator settings.
+It adds project retry state, acknowledgment intents and a durable contract-invalid flag.
+The latter survives scheduler blocker changes: lease-bound operations and retries
+cannot bypass contract reconciliation. Jobs begin blocked until acknowledgment is
+confirmed, or remain requirements-blocked. The random marker, exact body and sender
+are persisted before POST; a compare-and-set allows only one sender. A crash/lost
+response after send requires comment reconciliation. Absence of a matching comment
+never causes an automatic second POST. Explicit generations and their operator reason
+are inserted in one transaction; toggling labels never creates a generation.
+
+Intake cancellation/interrupt does not clear task/turn identity, lease or remote-operation
+reservations. Execution and recovery must reconcile authoritative remote state before
+releasing them. Every execution/publication boundary must invoke `Intake.authorize`
+for fresh authorization in addition to durable worker fencing. The Build 003 live
+fixture verifies GitHub/CLI intake only; complete agent execution and recovery remain
+later gates, and no production intake service is activated.

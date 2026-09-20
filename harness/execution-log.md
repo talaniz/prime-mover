@@ -300,3 +300,111 @@ Build 007; current behavior explicitly reserves/blocks them. No GitHub issue int
 production service, app implementation pipeline, automated reviewer or DOOM page exists
 yet. The scheduler is exercised with fake external adapters. Next gate: Build 003
 maintainer-authorized two-repository polling with lifecycle/revocation and fixture evidence.
+
+## Build 003 execution contract (in progress)
+
+Continue the same milestone branch/PR from Build 002 b5c5eb4. Implement authenticated
+GitHub issue/events/comment pagination behind an adapter, explicit allowlisted
+maintainer label provenance, required objective/scope/acceptance/verification sections,
+repository-scoped deduplication and durable acknowledgment reconciliation. Poll both
+projects fairly with per-project checkpoints, bounded pages/attempts and persisted
+backoff. Reconcile accepted issues for closure, label withdrawal and material edits
+before scheduling/publication; interrupt only owned active turns where supported.
+Missing requirements must be visibly blocked with a specific clarification request,
+not guessed. Operator contract reconciliation is explicit and auditable.
+
+Verification: tests-first policy cases; controlled GitHub adapters exercising duplicate
+pages, same-number issues, absent actor, unauthorized relabel, missing sections,
+403/429/outages, acknowledgment response loss and restart, checkpoint safety and
+lifecycle changes. Use actual SQLite and an isolated HTTP fixture for transport.
+Live acceptance will designate a new private talaniz/prime-mover-fixture repository,
+with a harmless issue and codex-ready label; never enable intake against production
+issues merely to demonstrate the defaults. Preserve the execution log with each commit.
+
+## Build 003 completed — authorized GitHub intake
+
+Implemented the GitHub REST adapter through the existing `gh` credential store,
+validated pagination and typed/redacted failures; explicit maintainer label-event
+policy and content-hashed contracts; schema-2 polling/acknowledgment state; independent
+project intake with durable checkpoints/backoff; lifecycle monitoring and worker
+fencing; explicit contract reconciliation and audited rerun generations. CLI now has
+`poll`, `reconcile-issue`, and `rerun`; public metadata has actionable intake blockers.
+Each repository's discovery slice is bounded, and concurrent repository polling
+prevents a slow repository from delaying the other. No execution task is started by
+intake. The two default production project entries remain unchanged.
+
+Test-first evidence (Node 22.23.2, npm 10.9.8, native SQLite on this Pi):
+
+- `npm run build` exited 0 with behavioral stubs before tests. Policy tests exited 1:
+  9 failed/1 passed, including expected authorized=true versus false and a missing
+  content hash. GitHub adapter tests exited 1 with 9 assertion failures, including
+  missing next-page mapping and missing HTTP failure rejection.
+- Initial intake tests exited 1 (11 failed/1 passed); primary behavioral assertions
+  found zero jobs where two independently authorized repository jobs were required,
+  and no persistent blocked job for incomplete requirements. The same cases passed
+  after implementation. Raw scratch evidence: `003-policy-red.txt`,
+  `003-github-red.txt`, `003-intake-red.txt` under ignored `harness/build/`.
+- Additional edge tests first failed for contract-invalid waiting transitions and
+  reruns bypassing intake pause (2 failures), slow-repository starvation (1 failure),
+  and operator reconciliation requeueing an unchanged job (1 failure). Fixed with
+  durable invalidation fencing, paused-rerun rejection, independent repository
+  polling, and reconciliation restricted to changed/incomplete blocked contracts.
+- Controlled tests cover duplicate pages/events/polls, same issue number across both
+  repositories, unauthorized/missing actors, misleading issue text, fenced/duplicate
+  contract headings, 401/403/429/outages, persistent retry delay, page interruption,
+  active-turn cancellation/owned interrupt identity, closure/relabel, explicit rerun,
+  contract edits, ambiguous POST responses and forged acknowledgment comments.
+  Unconfirmed sends are never automatically repeated. A real local HTTP fixture
+  exercises event/comment pagination, POST JSON and rate-limit handling through the
+  adapter; actual `gh` transport is separately verified by the live fixture below.
+- Schema-1 upgrade preserves existing job snapshots/events and operator pause.
+  A full regression run exposed a preexisting nondeterministic notification test:
+  it retried the first enqueued ID instead of the ID actually claimed when enqueue
+  timestamps tied. Corrected the test to use `lease.jobId`; production fairness
+  behavior was not changed to accommodate the test.
+
+Live acceptance used private `talaniz/prime-mover-fixture`, isolated external-volume
+state, and actual CLI invocations (including process reopen on every poll). The first
+attempt on issue #1 expected immediate label discovery and observed no job; subsequent
+read-only inspection found the issue and valid maintainer event. This was consistent
+with GitHub list propagation delay, not an authorization-policy rejection. Closed and
+unlabelled #1 with zero comments, preserved failed evidence, and added bounded live
+polling plus a later-full-scan test. Never counted that first attempt as a pass.
+
+The successful rehearsal ran 2026-09-20 21:33:59–21:34:56 UTC:
+
+- [Fixture #2](https://github.com/talaniz/prime-mover-fixture/issues/2): label event
+  `31493519274`, authenticated actor `talaniz`; generation-0 job
+  `38c06187-6dfd-4330-8518-eb0c1fbcd377`; acknowledgment
+  [5752821060](https://github.com/talaniz/prime-mover-fixture/issues/2#issuecomment-5752821060).
+  Repeated process/poll runs retained exactly one job/ack. Title edit blocked work;
+  explicit `reconcile-issue` accepted the revised contract. Label withdrawal cancelled
+  the job; relabelling did not rerun it.
+- Explicit `rerun` created generation 1, job
+  `041147b3-d43b-411e-8451-8c454a06a2d1`, with operator reason and a separate
+  [generation acknowledgment](https://github.com/talaniz/prime-mover-fixture/issues/2#issuecomment-5752822823).
+  Closing the issue cancelled this generation. Two comments here are expected for
+  two explicitly authorized generations, not a duplicate-send result.
+- [Fixture #3](https://github.com/talaniz/prime-mover-fixture/issues/3) had incomplete
+  requirements, remained blocked and received one specific
+  [clarification acknowledgment](https://github.com/talaniz/prime-mover-fixture/issues/3#issuecomment-5752824386).
+  Closing/unlabelling it cancelled the job. Final read-only verification: issues
+  #1/#2/#3 closed, no labels; comment counts 0/2/1, all authored by `talaniz`.
+- The script exited 0; all fixture jobs terminal, no active thread/turn IDs and no
+  execution task started. Retained ignored evidence: `harness/build/003-live-intake.json`;
+  isolated root `/media/talaniz/postgresdata/codex-work/intake-rehearsal-lygbMC`.
+  This did not activate production intake, alter live DOOM, merge or deploy.
+
+Design boundaries: acknowledgment absence after an ambiguous send remains blocked;
+only a matching exact body/marker and sender confirms delivery. Operator recovery for
+unresolved remote ambiguity remains Build 007. Fresh authorization guards are ready
+for Build 004 to invoke before every execution/publication boundary. The complete
+agent pipeline, automated reviews, DOOM Projects view and MVA release gates remain
+pending; independent milestone reviews run after implementation is complete.
+
+Final Build 003 verification: `npm run check` exited 0 after the final implementation
+and formatting: **47 unit + 51 integration + 4 CLI E2E = 102 passed**, zero failed or
+skipped. Includes the unchanged-job reconciliation guard, schema upgrade and HTTP
+fixture. `git diff --check` exited 0. Raw final output is ignored
+`harness/build/003-final-check.txt`. The native SQLite experimental warning remains
+visible; runtime/version restrictions from Builds 001–002 are unchanged.

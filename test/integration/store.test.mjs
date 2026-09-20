@@ -203,13 +203,13 @@ test("active cancellation reaches terminal state only after turn and side effect
 });
 test("pending notification blocks another job and operator retry until reconciled", (t) => {
   const { a } = setup(t);
-  const id = a.enqueue("prime-mover", 1, {});
+  a.enqueue("prime-mover", 1, {});
   a.enqueue("doom-dashboard", 2, {});
   const lease = a.claim("one", 100);
   a.notification(lease, "ready:head", { marker: "ready" });
   a.blockAndRelease(lease, "external-state-unknown");
   assert.equal(a.claim("two", 100), null);
-  assert.throws(() => a.retryBlocked(id, "try again"), /reconcil/);
+  assert.throws(() => a.retryBlocked(lease.jobId, "try again"), /reconcil/);
 });
 test("cancellation prevents creating new external-operation intents", (t) => {
   const { a } = setup(t);
@@ -217,4 +217,26 @@ test("cancellation prevents creating new external-operation intents", (t) => {
   const lease = a.claim("one", 100);
   a.cancel(id, "stop");
   assert.throws(() => a.operation(lease, "new-turn", "turn", {}), /cancel/i);
+});
+test("schema one upgrade preserves jobs, append-only events and operator pause", async (t) => {
+  const { a, filename, open } = setup(t);
+  const id = a.enqueue("prime-mover", 42, {
+    objective: "Existing version one job",
+  });
+  a.setPaused(true);
+  a.close();
+  const { DatabaseSync } = await import("node:sqlite");
+  const old = new DatabaseSync(filename);
+  old.exec(
+    "DROP TABLE intake_acks; DROP TABLE intake_polls; ALTER TABLE jobs DROP COLUMN intake_invalid; PRAGMA user_version=1;",
+  );
+  old.close();
+  const upgraded = open();
+  assert.equal(upgraded.paused(), true);
+  assert.equal(upgraded.job(id).snapshot.objective, "Existing version one job");
+  assert.equal(upgraded.events(id).length, 1);
+  assert.deepEqual(upgraded.pollState("prime-mover"), {
+    nextAt: 0,
+    failures: 0,
+  });
 });

@@ -2,7 +2,8 @@
 
 Milestone: **Minimum Viable Application** (the only milestone).
 Dependency: 002.
-Status: **pending**; committing this contract does not execute it.
+Status: **complete**; see the Build 003 evidence in ../execution-log.md.
+The complete MVA execution/review pipeline remains pending.
 Primary implementation commit trailer: `Build: 003`.
 
 ## Scope and deliverables

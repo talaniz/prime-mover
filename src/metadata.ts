@@ -5,6 +5,20 @@ import type { MetadataSnapshot, ProjectMetadata } from "./contracts.js";
 
 const blockers: Record<string, string> = {
   operator: "Operator action required",
+  "requirements-missing":
+    "Issue requirements are incomplete; update and reconcile the contract",
+  "contract-changed":
+    "Issue changed; operator contract reconciliation required",
+  "ack-pending":
+    "Intake acknowledgment pending; inspect reconciliation state if delayed",
+  "github-authentication": "GitHub authentication failed; restore credentials",
+  "github-forbidden": "GitHub access denied; verify repository permissions",
+  "github-rate-limited":
+    "GitHub rate limit reached; intake will retry after backoff",
+  "github-unavailable":
+    "GitHub result unavailable or uncertain; intake is backing off",
+  "github-invalid-response":
+    "GitHub evidence is invalid; inspect intake diagnostics",
   "auth-required": "Repository authentication or authorization required",
   "config-missing": "Project configuration needs attention",
   "lease-expired": "Worker lease expired; remote work must be reconciled",

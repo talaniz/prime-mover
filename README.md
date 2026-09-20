@@ -6,7 +6,7 @@ You set the objective. Prime Mover moves the pieces.
 
 ## Status
 
-Repository initialized. The workflow worker is not implemented or running yet. No GitHub polling, agent execution, notifications, or automatic merges are enabled by this repository.
+Builds 001–003 implement integration contracts, durable scheduling, operator controls, project metadata and maintainer-authorized GitHub intake. The execution/review pipeline and DOOM Projects page remain under development. No unattended worker is running; nothing merges automatically.
 
 ## Intended workflow
 
@@ -39,7 +39,7 @@ The mount currently uses the existing desktop-managed path and has no `/etc/fsta
 
 ## Development and verification
 
-Build 001 establishes the TypeScript/Node toolchain, configuration contracts and compatibility probes. Build 002 adds the durable store/scheduler, operator controls and metadata service; complete issue execution remains future builds. Follow `AGENTS.md` and the user's global PR review workflow.
+Build 001 establishes the TypeScript/Node toolchain, configuration contracts and compatibility probes. Build 002 adds the durable store/scheduler, operator controls and metadata service. Build 003 adds opt-in issue intake; complete issue execution remains future builds. Follow `AGENTS.md` and the user's global PR review workflow.
 
 Current repository checks:
 
@@ -56,7 +56,7 @@ Credentials, environment-specific configuration, databases and their WAL/SHM sid
 Start with [harness/README.md](harness/README.md) for the eight ordered build contracts,
 test-first commit workflow, execution log, independent reviews, and release notes.
 The application milestone is in progress; Build 001 contracts and compatibility checks
-are complete. The durable store/scheduler and metadata backend are implemented through Build 002; the complete execution pipeline and dashboard remain under development.
+are complete. The durable store/scheduler, metadata backend and authorized intake are implemented through Build 003; the complete execution pipeline and dashboard remain under development.
 
 ## Planned default projects
 
@@ -131,3 +131,51 @@ node scripts/rehearse-operator.mjs /media/talaniz/postgresdata VERIFIED_UUID
 This uses a temporary subtree of codex-work, existing read-only GitHub/app-server
 access and a temporary metadata server/token; it cleans up its own artifacts. It
 never enables a worker service or changes the live DOOM deployment.
+
+## Authorized intake (Build 003)
+
+These commands contact GitHub and may publish acknowledgment comments in configured
+repositories. Use a deliberately configured allowlist; `poll` performs one bounded
+round, not an unattended service or agent execution.
+
+```sh
+node dist/cli.js poll config.local.json
+node dist/cli.js reconcile-issue config.local.json JOB_ID "why the revised contract is accepted"
+node dist/cli.js rerun config.local.json TERMINAL_JOB_ID "why a new generation is requested"
+```
+
+An open issue needs a current `codex-ready` label whose latest label event identifies
+a configured maintainer. Its body must contain nonempty Objective, Scope, Acceptance
+criteria, and Verification headings. Issue text is task data, never authority.
+Incomplete authorized issues are blocked and receive one clarification acknowledgment.
+Unauthorized issues do not queue. Missing or ambiguous actor evidence fails closed.
+
+Repeated polls, restarts and label toggles preserve job/acknowledgment identity.
+Material title/body edits block work until explicit `reconcile-issue`; ordinary
+`retry` cannot accept a changed contract. Closure or withdrawal cancels pending work
+and requests interruption of the exact owned active turn, retaining its reservation
+until remote completion is confirmed. `rerun` requires an explicit reason and a
+reconciled terminal generation; it creates an audited generation, never implicitly.
+
+Each project has persistent pagination/backoff; repositories are polled independently.
+Polling continues lifecycle checks while intake is paused. Before execution or task
+publication, coordinators must call the fresh authorization guard. GitHub outages
+block the affected project, and a slow repository does not delay the other one.
+
+Acknowledgment intent is stored before POST. An ambiguous response is reconciled
+against the complete comment body/unique marker and authenticated author's identity;
+no match is **not** proof of non-delivery, so the worker never blindly reposts. Such
+uncertainty remains blocked for operator recovery. Generic remote recovery belongs
+to Build 007. GitHub list propagation can require a later poll; every completed
+pagination cycle starts a fresh full scan.
+
+Explicit live acceptance is isolated to private `talaniz/prime-mover-fixture`:
+
+```sh
+node scripts/rehearse-intake.mjs /media/talaniz/postgresdata VERIFIED_UUID harness/build/intake-evidence.json
+```
+
+It creates fixture issues/comments, verifies authorization, deduplication, edits,
+withdrawal, explicit rerun and incomplete requirements, then closes/unlabels the
+issues. Evidence and the isolated external-volume database are retained; failures
+must be inspected before another run. It refuses to overwrite existing evidence.

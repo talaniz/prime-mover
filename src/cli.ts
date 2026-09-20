@@ -3,6 +3,8 @@ import { execFileSync } from "node:child_process";
 import { validateConfig, PROTOCOL_VERSION } from "./config.js";
 import { checkStorage, openRuntime } from "./storage.js";
 import { metadataServer, metadataSnapshot } from "./metadata.js";
+import { Intake } from "./intake.js";
+import { GitHubClient } from "./github.js";
 import { AppServer } from "./app-server.js";
 import type { Job, Store } from "./store.js";
 
@@ -17,6 +19,9 @@ const commands = [
   "cancel",
   "retry",
   "metadata",
+  "poll",
+  "reconcile-issue",
+  "rerun",
 ];
 function output(value: unknown): void {
   console.log(JSON.stringify(value));
@@ -127,6 +132,39 @@ if (!command || !commands.includes(command) || !configPath) {
         if (command === "cancel") store.cancel(id, why);
         else store.retryBlocked(id, why);
         output(publicJob(store.job(id)));
+      } else if (["poll", "reconcile-issue", "rerun"].includes(command)) {
+        const app = new AppServer(config.appServer.socket);
+        let connected = false;
+        const intake = new Intake(store, new GitHubClient(), {
+          pollMs: config.pollSeconds * 1000,
+          interrupt: async (threadId, turnId) => {
+            if (!connected) {
+              await app.connect();
+              connected = true;
+            }
+            await app.request("turn/interrupt", { threadId, turnId });
+          },
+        });
+        try {
+          if (command === "poll") {
+            if (args.length) throw new Error("Unexpected command arguments");
+            await intake.poll();
+            output(metadataSnapshot(store, config.metadata.freshnessSeconds));
+          } else {
+            const [id, ...words] = args;
+            if (!id || !words.length)
+              throw new Error("Job ID and explicit reason are required");
+            if (command === "reconcile-issue") {
+              await intake.reconcile(id, words.join(" "));
+              output(publicJob(store.job(id)));
+            } else
+              output(
+                publicJob(store.job(await intake.rerun(id, words.join(" ")))),
+              );
+          }
+        } finally {
+          app.close();
+        }
       } else if (command === "metadata") {
         const token = await tokenFrom(config.metadata.tokenFile);
         const server = metadataServer(
