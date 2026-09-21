@@ -49,9 +49,24 @@ export function metadataSnapshot(
   const jobs = view.jobs;
   const projects: ProjectMetadata[] = view.projects.map((p) => {
     const scoped = jobs.filter((j) => j.projectId === p.id);
-    const active = scoped.find(
-      (j) => j.leaseOwner !== null || j.activeTurnId !== null,
-    );
+    // Review handoffs release execution ownership, but the PR still has work pending.
+    const active =
+      scoped.find((j) => j.leaseOwner !== null || j.activeTurnId !== null) ??
+      scoped
+        .filter((j) =>
+          [
+            "preparing",
+            "implementing",
+            "verifying",
+            "pr-open",
+            "code-review",
+            "code-fixes",
+            "e2e-review",
+            "e2e-fixes",
+            "waiting",
+          ].includes(j.stage),
+        )
+        .sort((a, b) => b.updatedAt - a.updatedAt)[0];
     const outcome = scoped
       .filter((j) =>
         ["ready", "blocked", "cancelled", "merged", "closed"].includes(j.stage),

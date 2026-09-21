@@ -127,9 +127,10 @@ Metadata queries read registry, jobs and global pause in one SQLite read transac
 They project only public fields. `pollState` is fresh/stale/never-polled and is separate
 from snapshot observation time. Blocker codes map to safe fixed messages; raw failure
 text and stored issue snapshots are never returned. GET cannot create jobs or change
-operator state. The Unix socket and token are owner-only. CLI startup refuses an
-existing socket rather than deleting another server's socket; stale-socket recovery
-is still part of Build 007's supervised service design.
+operator state. The Unix socket and token are owner-only. CLI startup holds an owner-private adjacent file lock through the listener lifetime.
+It preserves active/uncertain listeners and non-socket paths; an owned stale socket
+is removed only after a refused connection probe and inode recheck. Kernel locks
+release on process death, allowing concurrent restart attempts to select one listener.
 
 Runtime storage preflight verifies mount target, ext4, UUID, rw option, canonical
 paths and device identity. It rejects existing and dangling symlinks, including

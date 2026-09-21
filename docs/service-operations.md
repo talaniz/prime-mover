@@ -132,3 +132,19 @@ Privileged read-only `findmnt --verify` validated the UUID, device and ext4 type
 errors or warnings. The example is not installed, and validation is not proof of a
 physical reboot. Mount installation, boot verification and the memory-controller change
 remain deployment prerequisites requiring the owner's planned approval.
+
+## Metadata listener crash recovery
+
+Metadata startup uses `/usr/bin/flock` from util-linux (also the provider of the
+required `findmnt`). An adjacent mode-0600 `.lock` file persists; the kernel lock
+is held only while the listener process is alive. Do not remove that file while
+any metadata listener might be running. After SIGKILL, startup takes the lock,
+confirms an existing owned socket refuses connections, rechecks its inode, removes
+that stale socket and binds a new mode-0600 endpoint. Concurrent starts cannot
+replace each other's listener. A regular file, symlink, foreign/active listener or
+uncertain probe is preserved and startup fails for operator investigation. No PID
+file or elapsed-time assumption is used to prove a listener has stopped.
+
+Jobs waiting between implementation and review remain visible as active work even
+after the execution lease has been released; the displayed stage identifies that
+handoff. This display does not reserve a new execution turn.

@@ -1562,3 +1562,56 @@ or skipping failures. Switched the runner to Ubuntu 22.04, installed Bubblewrap 
 added an explicit fail-fast namespace probe. Documented the Linux/Git/Bubblewrap
 fresh-checkout prerequisites. The original failed run is preserved; the next GitHub
 run must prove green. No Pi package, kernel, permission or service settings changed.
+
+### Independent Prime Mover code-review findings and fixes
+
+Reviewer `/root/pm_code_review` inspected all eight primary commits and aggregate
+implementation at `f0619de2d703b0115c60709dca81df8c08ff9260` and posted four P2
+findings, without sign-off:
+https://github.com/talaniz/prime-mover/pull/3#issuecomment-5754966873.
+All four are accepted within scope.
+
+- **PM-CR-1 — pending review visibility:** acceptance requires a published job to
+  remain visible with its exact stage/PR while ownership is released between
+  implementation and reviews. The Store-transition regression failed before the
+  fix (activeJob null after finishImplementation), then passed. Metadata now prefers
+  an actual lease/turn holder and otherwise shows pending execution/review stages;
+  queued and terminal jobs retain their separate queue/outcome meanings.
+- **PM-CR-2 — stale socket:** acceptance requires SIGKILL→restart to recover an owned
+  stale socket, simultaneous starts to leave one listener, and active listeners,
+  regular files and symlinks to be preserved. Extracted the existing bind behavior
+  unchanged into a listener helper; the crash/restart regression then failed with
+  zero successful replacements. An initial unused-import TypeScript diagnostic was
+  corrected before repeating meaningful red (`008-review-socket-red2.txt`).
+  Added an owner-private adjacent flock held by the parent open file description,
+  automatically released on death. Only a refused connection plus matching socket
+  inode permits stale unlink. CLI checks mount descendants for both socket and lock.
+  Five actual-process/socket tests pass, including concurrent restart and foreign
+  active listener/lock symlink refusal. Actual CLI on a disposable verified-volume
+  runtime passed SIGKILL/stale-path/restart/authenticated-two-defaults acceptance:
+  `harness/build/008-live-metadata-restart.txt`. No execution jobs started.
+- **PM-CR-3 — CI sandbox:** addressed by `6e4a7252aa705e31f16559f592fb402b3f6bab0a`.
+  Actual GitHub run **passed** after installing/probing Bubblewrap:
+  https://github.com/talaniz/prime-mover/actions/runs/35557469037.
+  The initial failed run remains recorded. No verification fallback or skip added.
+- **PM-CR-4 — RPC test timing:** reviewer reproduced a normal disconnect losing a
+  race to the fixture's universal 100 ms timeout under load. Positive/disconnect
+  fixtures now use a bounded five-second allowance; only the intentional timeout
+  scenario uses 100 ms and still asserts one send/no retry. Production RPC timing
+  is unchanged. Focused protocol tests pass.
+
+`npm run check` after the product fixes: **291 passed** (77 unit, 205 integration,
+9 CLI E2E), strict TypeScript; `harness/build/008-review-fixes-check.txt`. Focused
+metadata/socket/RPC checks are repeated after final descendant-guard wiring.
+Service/architecture docs describe lock lifetime and recovery rather than the old
+unimplemented stale-socket plan. Same-reviewer revalidation and new-head CI are
+required before independent PM E2E review starts.
+
+DOOM code sign-off at `4aacb601a8e158aa9310b8c62fd8a2c0464f70e7`:
+https://github.com/talaniz/doom-control/pull/14#issuecomment-5754932075.
+Distinct DOOM E2E reviewer `/root/doom_e2e_review` independently exercised Chromium,
+security/logout probes, actual PM CLI integration, all 28 tests and inspected all 14
+screenshots, then signed the same DOOM head:
+https://github.com/talaniz/doom-control/pull/14#issuecomment-5754967872.
+Its tested PM head was `f0619de`; changed PM metadata requires affected paired-head
+integration and review revalidation before final MVA readiness.

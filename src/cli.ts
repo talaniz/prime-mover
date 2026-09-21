@@ -13,11 +13,12 @@ import { ExecutionAgent } from "./execution-agent.js";
 import { Publication, GitHubPulls } from "./publication.js";
 import { Scheduler, type WorkContext } from "./scheduler.js";
 import { StartupRecovery, recoveryRoute } from "./startup-recovery.js";
-import { readFile, lstat, chmod, mkdir } from "node:fs/promises";
+import { readFile, lstat, mkdir } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { validateConfig, PROTOCOL_VERSION, isWithin } from "./config.js";
 import { checkStorage, openRuntime, safeDescendant } from "./storage.js";
 import { metadataServer, metadataSnapshot } from "./metadata.js";
+import { listenMetadata } from "./metadata-listener.js";
 import { Intake } from "./intake.js";
 import { GitHubClient } from "./github.js";
 import { AppServer } from "./app-server.js";
@@ -570,11 +571,9 @@ if (!command || !commands.includes(command) || !configPath) {
           token,
           config.metadata.freshnessSeconds,
         );
-        await new Promise<void>((resolve, reject) => {
-          server.once("error", reject);
-          server.listen(config.metadata.socket, resolve);
-        });
-        await chmod(config.metadata.socket, 0o600);
+        safeDescendant(config.storage.mount, config.metadata.socket);
+        safeDescendant(config.storage.mount, `${config.metadata.socket}.lock`);
+        await listenMetadata(server, config.metadata.socket);
         keepOpen = true;
         const stop = () => {
           server.close(() => {

@@ -91,3 +91,21 @@ test("metadata rejects unauthorized, unknown project and mutation requests and n
   assert.equal(store.events(id).length, before);
   assert.equal(store.jobs().length, 1);
 });
+test("published work remains visible while ownership is released between review stages", (t) => {
+  const { store } = setup(t);
+  const id = store.enqueue("prime-mover", 42, {});
+  const lease = store.claim("worker", 30000);
+  store.transition(lease, "implementing");
+  store.transition(lease, "verifying");
+  store.finishImplementation(lease, 43);
+  const p = metadataSnapshot(store, 120, 1000).projects.find(
+    (p) => p.id === "prime-mover",
+  );
+  assert.equal(p.queuedJobs, 0);
+  assert.equal(p.activeJob?.id, id);
+  assert.equal(p.activeJob?.stage, "pr-open");
+  assert.equal(
+    p.activeJob?.prUrl,
+    "https://github.com/talaniz/prime-mover/pull/43",
+  );
+});
