@@ -1726,3 +1726,16 @@ this avoids recursive sign-off-only commits. Those PR records are authoritative
 for final delivery status. Owner approval remains required for merge/deployment.
 Persistent boot mounting, kernel memory-controller enablement/reboot and actual
 memory-limit enforcement remain unperformed deployment prerequisites.
+
+
+### Final remote verification correction
+
+The final GitHub PR query verified DOOM does have a configured Tests workflow and
+[passing exact-head CI](https://github.com/talaniz/doom-control/actions/runs/35556930007)
+at `4aacb601a8e158aa9310b8c62fd8a2c0464f70e7`. The release-note sentence claiming
+no configured DOOM CI was incorrect and is corrected here. Actual browser checks
+remain distinct evidence. Both PRs had briefly been marked ready after the prior
+sign-offs; PM was returned to draft for this two-file documentation correction.
+No executable changes or application reruns are needed. Final reviewers must
+revalidate the new documentation SHA; the PR records remain authoritative. Diff
+whitespace and local documentation-link checks pass.
