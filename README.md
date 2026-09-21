@@ -6,7 +6,7 @@ You set the objective. Prime Mover moves the pieces.
 
 ## Status
 
-Builds 001–005 implement integration contracts, durable scheduling, operator controls, project metadata, maintainer-authorized GitHub intake and supervised isolated implementation through a draft PR and independent code review with verified corrections. E2E coordination and DOOM Projects page remain under development. No unattended worker is running; nothing merges automatically.
+Builds 001–006 implement integration contracts, durable scheduling, operator controls, project metadata, maintainer-authorized GitHub intake and supervised isolated implementation through a draft PR and independent code/E2E reviews with verified corrections, gated readiness and one durable notification. Full recovery, unattended operation and the DOOM Projects page remain under development. No unattended worker is running; nothing merges automatically.
 
 ## Intended workflow
 
@@ -39,7 +39,7 @@ The mount currently uses the existing desktop-managed path and has no `/etc/fsta
 
 ## Development and verification
 
-Build 001 establishes the TypeScript/Node toolchain, configuration contracts and compatibility probes. Build 002 adds the durable store/scheduler, operator controls and metadata service. Build 003 adds opt-in issue intake; Build 004 adds bounded implementation and verified draft publication. Build 005 adds independent code review, public finding triage, bounded corrections and exact-head sign-off. E2E coordination and full recovery remain future builds. Follow `AGENTS.md` and the user's global PR review workflow.
+Build 001 establishes the TypeScript/Node toolchain, configuration contracts and compatibility probes. Build 002 adds the durable store/scheduler, operator controls and metadata service. Build 003 adds opt-in issue intake; Build 004 adds bounded implementation and verified draft publication. Build 005 adds independent code review, public finding triage, bounded corrections and exact-head sign-off. Build 006 adds distinct E2E review, correction re-review, GitHub readiness gates and durable notification. Full operational recovery remains a future build. Follow `AGENTS.md` and the user's global PR review workflow.
 
 Current repository checks:
 
@@ -56,7 +56,7 @@ Credentials, environment-specific configuration, databases and their WAL/SHM sid
 Start with [harness/README.md](harness/README.md) for the eight ordered build contracts,
 test-first commit workflow, execution log, independent reviews, and release notes.
 The application milestone is in progress; Build 001 contracts and compatibility checks
-are complete. The durable store/scheduler, metadata backend and authorized intake are implemented through Build 005; the complete review pipeline and dashboard remain under development.
+are complete. The durable store/scheduler, metadata backend and authorized intake are implemented through Build 006; full operational recovery and the dashboard remain under development.
 
 ## Planned default projects
 
@@ -253,3 +253,45 @@ The supervised live fixture gate is `scripts/rehearse-review.mjs MOUNT VERIFIED_
 EVIDENCE_PATH`. It deliberately seeds a defect in a private fixture PR, verifies the
 finding/correction/sign-off cycle, and refuses existing evidence or open authorized
 fixtures. Inspect and reconcile failures before any new run.
+
+
+## Supervised E2E and readiness (Build 006)
+
+After current-head code sign-off, run the distinct E2E reviewer:
+
+```sh
+node dist/cli.js e2e-review config.local.json JOB_ID
+node dist/cli.js recheck-ready config.local.json JOB_ID
+```
+
+E2E must exercise actual successful and failing user workflows against the full
+acceptance contract. Its task differs from both implementation and code review.
+Accepted corrections return through code re-review before E2E can sign off again.
+All corrections share the persistent budget; task/review rounds remain bounded.
+
+Readiness requires matching code/E2E head and base, no unresolved findings or evidence
+gaps, passing configured verification, fresh GitHub checks/requirements and an open,
+conflict-free PR. Missing or ambiguous evidence blocks. The coordinator posts one
+attributed comment mentioning the configured maintainers and containing the exact
+head, checks, review links and remaining human actions. Lost responses reconcile the
+stored marker/body/author; uncertain absence never triggers a blind repeat POST.
+The worker records `ready` only after a fresh post-notification recheck. The generated
+PR remains a draft; merge and deployment require human approval.
+
+`recheck-ready` refreshes authorization, workspace/PR identity and GitHub check state.
+A failed or unavailable check revokes local readiness into a visible blocker. This
+command is supervised; automatic periodic rechecking belongs to the service/recovery
+build. The public readiness comment identifies its verified snapshot and does not
+promise that later changes retain readiness or that email/push was delivered.
+
+If checks recover without a code/contract change, inspect the blocker, then use the
+existing explicit `resume-code-review` continuation with a reason and `e2e-review`.
+Completed-turn proof and current-head evidence must still pass. The verified fixture
+reused both sign-offs and the single notification without a new model turn or budget
+reset. Unknown pending operations and expired budgets remain blocked for reconciliation.
+
+Live gates: `scripts/rehearse-e2e.mjs CODE_REVIEW_EVIDENCE NEW_EVIDENCE` continues the
+owned private fixture. `scripts/rehearse-readiness-recovery.mjs E2E_EVIDENCE NEW_EVIDENCE`
+injects a failed fixture commit status, checks revocation, restores that status and
+proves recovery without duplicate tasks/notifications. Both preserve evidence and
+refuse to overwrite an earlier attempt. They do not modify production services.

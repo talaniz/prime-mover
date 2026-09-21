@@ -14,7 +14,17 @@ export interface Finding {
   acceptance: string;
   verification: string;
 }
+export type ReviewRole = "code-review" | "e2e-review";
+export interface WorkflowEvidence {
+  kind: "success" | "failure";
+  scenario: string;
+  expected: string;
+  observed: string;
+  passed: boolean;
+}
 export interface ReviewReport {
+  acceptance?: string;
+  workflows?: WorkflowEvidence[];
   head: string;
   base: string;
   commits: string[];
@@ -76,7 +86,10 @@ function equalTarget(a: ReviewTarget, b: ReviewTarget): boolean {
 }
 /** Immutable review records use the same fenced, append-only-intent durability as execution. */
 export class Reviews {
-  constructor(private readonly store: Store) {}
+  constructor(
+    private readonly store: Store,
+    private readonly role: ReviewRole = "code-review",
+  ) {}
   private records<T>(id: string, kind: string): T[] {
     return this.store
       .operations(id)
@@ -123,7 +136,7 @@ export class Reviews {
     report: Pick<ReviewReport, "resolutions">,
   ): void {
     const findings = new Map(
-      this.records<ReviewReport>(id, "code-review-report")
+      this.records<ReviewReport>(id, `${this.role}-report`)
         .flatMap((r) => r.findings)
         .map((f) => [f.id, f]),
     );
@@ -157,31 +170,35 @@ export class Reviews {
       throw new Error("Review head/base/commit coverage is stale");
     bounded(report.taskId, "task identity", 200);
     bounded(report.turnId, "turn identity", 200);
-    const implementationTasks = this.store
-      .operations(lease.jobId)
+    const operations = this.store.operations(lease.jobId);
+    const otherRoleTasks = operations
       .filter(
         (o) =>
           o.kind === "thread-start" &&
-          !o.key.startsWith("code-review-") &&
-          !o.key.startsWith("e2e-review-"),
+          ((o.input as { role?: string }).role ?? "implementation") !==
+            this.role,
       )
       .map((o) => (o.result as { threadId?: string } | null)?.threadId);
-    if (implementationTasks.includes(report.taskId))
-      throw new Error("Review must be independent of implementation");
-    const operations = this.store.operations(lease.jobId);
+    if (otherRoleTasks.includes(report.taskId))
+      throw new Error(
+        "Review must be independent of implementation and other review roles",
+      );
+    if (this.role === "e2e-review")
+      new Reviews(this.store).requireCodeSignoff(lease.jobId, report);
+
     if (
       !operations.some(
         (o) =>
           o.kind === "thread-start" &&
-          o.key.startsWith("code-review-") &&
+          o.key.startsWith(`${this.role}-`) &&
           o.status === "done" &&
           (o.result as { threadId?: string }).threadId === report.taskId &&
-          (o.input as { role?: string }).role === "code-review",
+          (o.input as { role?: string }).role === this.role,
       ) ||
       !operations.some(
         (o) =>
           o.kind === "turn-start" &&
-          o.key.startsWith("code-review-") &&
+          o.key.startsWith(`${this.role}-`) &&
           o.status === "done" &&
           (o.input as { threadId?: string }).threadId === report.taskId &&
           (o.result as { turnId?: string }).turnId === report.turnId,
@@ -246,15 +263,45 @@ export class Reviews {
         throw new Error(
           "Sign-off requires checks and no findings or missing review evidence",
         );
+      if (this.role === "e2e-review") {
+        const snapshot = this.store.job(lease.jobId)!.snapshot as {
+          decision?: { contract?: { acceptance?: string } };
+        };
+        bounded(report.acceptance, "acceptance contract");
+        if (report.acceptance !== snapshot?.decision?.contract?.acceptance)
+          throw new Error("E2E acceptance contract changed or missing");
+        const workflows = report.workflows;
+        if (
+          !Array.isArray(workflows) ||
+          workflows.length < 2 ||
+          workflows.length > 100 ||
+          !workflows.some((w) => w.kind === "success") ||
+          !workflows.some((w) => w.kind === "failure")
+        )
+          throw new Error(
+            "E2E sign-off requires actual success and failure workflows",
+          );
+        for (const workflow of workflows) {
+          if (
+            !workflow ||
+            !["success", "failure"].includes(workflow.kind) ||
+            workflow.passed !== true
+          )
+            throw new Error("Failed or invalid E2E workflow evidence");
+          bounded(workflow.scenario, "workflow scenario");
+          bounded(workflow.expected, "workflow expected result");
+          bounded(workflow.observed, "workflow observed result");
+        }
+      }
       this.resolved(lease.jobId, report);
     }
   }
   record(lease: Lease, report: ReviewReport): void {
     this.validate(lease, report);
     this.url(lease.jobId, report.reportUrl);
-    const key = `code-review-report:${report.taskId}:${report.turnId}`;
+    const key = `${this.role}-report:${report.taskId}:${report.turnId}`;
     const evidence = { ...report, targetRevision: this.revision(lease.jobId) };
-    this.store.operation(lease, key, "code-review-report", evidence);
+    this.store.operation(lease, key, `${this.role}-report`, evidence);
     this.store.completeOperation(lease, key, evidence);
   }
   reserveCorrection(lease: Lease, key: string, limit: number): number {
@@ -269,7 +316,7 @@ export class Reviews {
     );
     const latest = this.records<ReviewReport>(
       lease.jobId,
-      "code-review-report",
+      `${this.role}-report`,
     ).at(-1);
     const accepted =
       latest?.findings
@@ -305,8 +352,8 @@ export class Reviews {
     this.url(lease.jobId, disposition.replyUrl);
     if (
       !["accepted", "rejected", "deferred"].includes(disposition.decision) ||
-      !this.records<ReviewReport>(lease.jobId, "code-review-report").some((r) =>
-        r.findings.some((f) => f.id === disposition.findingId),
+      !this.records<ReviewReport>(lease.jobId, `${this.role}-report`).some(
+        (r) => r.findings.some((f) => f.id === disposition.findingId),
       )
     )
       throw new Error("Unknown review finding or disposition");
@@ -330,11 +377,14 @@ export class Reviews {
     this.store.completeOperation(lease, key, disposition);
   }
   requireCodeSignoff(id: string, target: ReviewTarget): ReviewReport {
+    return new Reviews(this.store, "code-review").requireSignoff(id, target);
+  }
+  requireSignoff(id: string, target: ReviewTarget): ReviewReport {
     targetValid(target);
     const current = this.current(id);
     const report = this.records<ReviewReport & { targetRevision: string }>(
       id,
-      "code-review-report",
+      `${this.role}-report`,
     ).at(-1);
     if (
       !current ||
@@ -345,8 +395,10 @@ export class Reviews {
       report.verdict !== "sign-off"
     )
       throw new Error(
-        "Current-head independent code-review sign-off is required",
+        `Current-head independent ${this.role} sign-off is required`,
       );
+    if (this.role === "e2e-review")
+      new Reviews(this.store).requireCodeSignoff(id, target);
     this.resolved(id, report);
     return report;
   }

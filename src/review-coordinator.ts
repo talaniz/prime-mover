@@ -16,7 +16,12 @@ export interface ReviewServices {
 
 import { ExecutionBlocked } from "./execution-agent.js";
 import { CodeReviewRound } from "./code-review.js";
-import { Reviews, type ReviewReport, type Disposition } from "./reviews.js";
+import {
+  Reviews,
+  type ReviewReport,
+  type Disposition,
+  type ReviewRole,
+} from "./reviews.js";
 import { CommandEvidence } from "./command-evidence.js";
 import { waitForAgent } from "./agent-wait.js";
 import { git, type WorkspacePlan } from "./worktree.js";
@@ -66,8 +71,34 @@ export class ReviewCoordinator {
     private readonly store: Store,
     private readonly config: Config,
     private readonly services: ReviewServices,
-    private readonly options: { pollMs?: number; approvalWaitMs?: number } = {},
+    private readonly options: {
+      pollMs?: number;
+      approvalWaitMs?: number;
+      role?: ReviewRole;
+      retainLease?: boolean;
+    } = {},
   ) {}
+  private get role(): ReviewRole {
+    return this.options.role ?? "code-review";
+  }
+  private finish(context: WorkContext): void {
+    if (this.role === "code-review")
+      this.store.finishCodeReview(
+        context.lease,
+        this.options.retainLease ?? false,
+      );
+  }
+  private async ensureCodeReview(context: WorkContext): Promise<void> {
+    if (
+      this.role === "e2e-review" &&
+      this.store.job(context.lease.jobId)!.stage === "code-review"
+    )
+      await new ReviewCoordinator(this.store, this.config, this.services, {
+        ...this.options,
+        role: "code-review",
+        retainLease: true,
+      }).run(context);
+  }
   private async task(
     context: WorkContext,
     plan: WorkspacePlan,
@@ -183,7 +214,7 @@ export class ReviewCoordinator {
     n: number,
     deadline: number,
   ): Promise<Disposition[]> {
-    const key = `triage-${n}`,
+    const key = `${this.role === "e2e-review" ? "e2e-" : ""}triage-${n}`,
       opKey = `${key}:decision`,
       input = { head: report.head, reportUrl: report.reportUrl };
     const op = this.store.operation(
@@ -221,7 +252,7 @@ export class ReviewCoordinator {
       job.prNumber!,
       `Coordinator assessment for reviewed head ${report.head}. Task ${result.threadId}; turn ${result.turnId}.\n\nAcceptance and verification contracts precede corrections. Deferred work remains tracked in this PR discussion.\n\n\`\`\`json\n${result.raw}\n\`\`\``,
     );
-    const reviews = new Reviews(this.store),
+    const reviews = new Reviews(this.store, this.role),
       recorded = decisions.map((d) => ({ ...d, replyUrl }));
     for (const d of recorded) reviews.triage(context.lease, d);
     this.store.completeOperation(context.lease, opKey, recorded);
@@ -236,21 +267,24 @@ export class ReviewCoordinator {
     n: number,
     deadline: number,
   ): Promise<void> {
-    const key = `code-fix-${n}`,
+    const key = `${this.role === "e2e-review" ? "e2e" : "code"}-fix-${n}`,
       opKey = `${key}:correction`,
       input = { head: report.head, decisions };
     const existing = this.store
       .operations(context.lease.jobId)
       .find((o) => o.key === opKey);
     if (existing?.status !== "done") {
-      new Reviews(this.store).reserveCorrection(
+      new Reviews(this.store, this.role).reserveCorrection(
         context.lease,
         key,
         this.config.limits.correctionCycles,
       );
       this.store.operation(context.lease, opKey, "review-fix", input);
-      if (this.store.job(context.lease.jobId)!.stage === "code-review")
-        this.store.transition(context.lease, "code-fixes");
+      if (this.store.job(context.lease.jobId)!.stage === this.role)
+        this.store.transition(
+          context.lease,
+          this.role === "e2e-review" ? "e2e-fixes" : "code-fixes",
+        );
       const snapshot = await this.services.intake.authorize(
         context.lease.jobId,
       );
@@ -269,7 +303,11 @@ export class ReviewCoordinator {
         project,
         key,
       );
-      if (this.store.job(context.lease.jobId)!.stage === "code-fixes")
+      if (
+        ["code-fixes", "e2e-fixes"].includes(
+          this.store.job(context.lease.jobId)!.stage,
+        )
+      )
         this.store.transition(context.lease, "verifying");
       const commands = new CommandEvidence(
           this.store,
@@ -341,6 +379,7 @@ export class ReviewCoordinator {
         );
       if (!Number.isSafeInteger(deadline) || Date.now() >= deadline)
         throw new ExecutionBlocked("budget-exhausted");
+      await this.ensureCodeReview(context);
       const round = new CodeReviewRound(
         this.store,
         this.config,
@@ -350,8 +389,8 @@ export class ReviewCoordinator {
         this.services.comments,
         this.options,
       );
-      for (let n = 1; n <= this.config.limits.correctionCycles + 1; n++) {
-        const cycleKey = `review-cycle:${n}`,
+      for (let n = 1; n <= 2 * this.config.limits.correctionCycles + 2; n++) {
+        const cycleKey = `${this.role === "e2e-review" ? "e2e-" : ""}review-cycle:${n}`,
           prior = this.store.operations(job.id).find((o) => o.key === cycleKey);
         if (prior?.status === "done") {
           if (object(prior.result).verdict === "sign-off") {
@@ -361,25 +400,38 @@ export class ReviewCoordinator {
               project,
               job.prNumber,
             );
-            const reviews = new Reviews(this.store);
+            const reviews = new Reviews(this.store, this.role);
             reviews.bind(context.lease, current.target);
-            reviews.requireCodeSignoff(job.id, current.target);
-            this.store.finishCodeReview(context.lease);
-            return;
+            let currentSignoff = false;
+            try {
+              reviews.requireSignoff(job.id, current.target);
+              currentSignoff = true;
+            } catch {
+              /* A changed target requires a new independent round. */
+            }
+            if (currentSignoff) {
+              this.finish(context);
+              return;
+            }
           }
           continue;
         }
-        this.store.operation(context.lease, cycleKey, "review-cycle", {
-          round: n,
-        });
+        this.store.operation(
+          context.lease,
+          cycleKey,
+          `${this.role === "e2e-review" ? "e2e-" : ""}review-cycle`,
+          {
+            round: n,
+          },
+        );
         const recorded = this.store
           .operations(job.id)
           .find(
-            (o) => o.key === `code-review-${n}:round` && o.status === "done",
+            (o) => o.key === `${this.role}-${n}:round` && o.status === "done",
           );
         const report = recorded
           ? (recorded.result as ReviewReport)
-          : await round.run(context, plan, project, `code-review-${n}`);
+          : await round.run(context, plan, project, `${this.role}-${n}`);
         if (report.verdict === "blocked")
           throw new ExecutionBlocked("reviewer-blocked");
         if (report.verdict === "sign-off") {
@@ -389,14 +441,14 @@ export class ReviewCoordinator {
             project,
             job.prNumber,
           );
-          const reviews = new Reviews(this.store);
+          const reviews = new Reviews(this.store, this.role);
           reviews.bind(context.lease, current.target);
-          reviews.requireCodeSignoff(job.id, current.target);
+          reviews.requireSignoff(job.id, current.target);
           this.store.completeOperation(context.lease, cycleKey, {
             head: report.head,
             verdict: report.verdict,
           });
-          this.store.finishCodeReview(context.lease);
+          this.finish(context);
           return;
         }
         if (!report.findings.length)
@@ -423,6 +475,7 @@ export class ReviewCoordinator {
           head: report.head,
           verdict: report.verdict,
         });
+        await this.ensureCodeReview(context);
       }
       throw new ExecutionBlocked("review-cycle-budget-exhausted");
     } catch (error) {

@@ -2,7 +2,7 @@
 
 Milestone: **Minimum Viable Application** (the only milestone).
 Dependency: 005.
-Status: **pending**; committing this contract does not execute it.
+Status: **complete**; independent live E2E, one readiness notification and failed-check revocation/recovery verified. See the execution log.
 Primary implementation commit trailer: `Build: 006`.
 
 ## Scope and deliverables

@@ -1,3 +1,5 @@
+import { readinessEvidence } from "./readiness.js";
+import type { WorkspacePlan } from "./worktree.js";
 import { ReviewCoordinator } from "./review-coordinator.js";
 import { ReviewInputs } from "./review-input.js";
 import { PrComments } from "./pr-comments.js";
@@ -31,6 +33,8 @@ const commands = [
   "poll",
   "run-once",
   "code-review",
+  "e2e-review",
+  "recheck-ready",
   "resume-code-review",
   "resume-publication",
   "reconcile-issue",
@@ -145,11 +149,50 @@ if (!command || !commands.includes(command) || !configPath) {
         if (command === "cancel") store.cancel(id, why);
         else store.retryBlocked(id, why);
         output(publicJob(store.job(id)));
+      } else if (command === "recheck-ready") {
+        if (args.length !== 1)
+          throw new Error("Exactly one ready job ID is required");
+        const id = args[0]!,
+          job = store.job(id);
+        if (!job || job.stage !== "ready") throw new Error("Job is not ready");
+        try {
+          const intake = new Intake(store, new GitHubClient());
+          await intake.authorize(id);
+          const project = store.projects().find((p) => p.id === job.projectId)!;
+          const plan = store
+            .operations(id)
+            .find((o) => o.key === "workspace-plan")!.result as WorkspacePlan;
+          const pulls = new GitHubPulls(),
+            inputs = new ReviewInputs(
+              new Worktrees(config.storage.root, undefined, config.gitAuthor),
+              pulls,
+            );
+          const input = await inputs.collect(plan, project, job.prNumber!);
+          readinessEvidence(
+            store,
+            id,
+            await pulls.readiness(
+              project.repository,
+              job.prNumber!,
+              project.baseBranch,
+              input.target,
+            ),
+            Date.now(),
+            true,
+          );
+          output({ result: "ready", head: input.target.head });
+        } catch {
+          if (store.job(id)?.stage === "ready")
+            store.revokeReadiness(id, "readiness-check-failed");
+          output({ result: store.job(id)?.stage ?? "blocked" });
+          process.exitCode = 1;
+        }
       } else if (
         [
           "run-once",
           "resume-publication",
           "code-review",
+          "e2e-review",
           "resume-code-review",
         ].includes(command)
       ) {
@@ -159,7 +202,10 @@ if (!command || !commands.includes(command) || !configPath) {
           );
         if (command === "resume-code-review" && args.length < 2)
           throw new Error("Job ID and explicit reason are required");
-        if (command === "code-review" && args.length !== 1)
+        if (
+          ["code-review", "e2e-review"].includes(command) &&
+          args.length !== 1
+        )
           throw new Error("Exactly one job ID is required for code review");
         if (command === "run-once" && args.length)
           throw new Error("Unexpected command arguments");
@@ -211,7 +257,12 @@ if (!command || !commands.includes(command) || !configPath) {
           const owner = `worker-${randomUUID()}`;
           const scheduler = new Scheduler(store, owner);
           let result: string;
-          if (command === "code-review" || command === "resume-code-review") {
+          if (
+            ["code-review", "resume-code-review", "e2e-review"].includes(
+              command,
+            )
+          ) {
+            const e2e = command === "e2e-review";
             const id = args[0]!;
             let lease;
             if (command === "resume-code-review") {
@@ -239,20 +290,60 @@ if (!command || !commands.includes(command) || !configPath) {
               );
             } else {
               await intake.authorize(id);
-              lease = store.claimCodeReview(id, owner, 30000);
+              lease = e2e
+                ? store.claimE2EReview(id, owner, 30000)
+                : store.claimCodeReview(id, owner, 30000);
             }
-            const review = new ReviewCoordinator(store, config, {
-              agent,
-              inputs: new ReviewInputs(trees, pulls),
-              comments: new PrComments(store, github, (id) =>
+            const inputs = new ReviewInputs(trees, pulls),
+              comments = new PrComments(store, github, (id) =>
                 intake.authorize(id),
-              ),
-              publication,
-              intake,
-            });
-            result = await scheduler.runClaimed(lease, (context) =>
-              review.run(context),
+              );
+            const review = new ReviewCoordinator(
+              store,
+              config,
+              { agent, inputs, comments, publication, intake },
+              { role: e2e ? "e2e-review" : "code-review" },
             );
+            result = await scheduler.runClaimed(lease, async (context) => {
+              await review.run(context);
+              if (e2e) {
+                const job = store!.job(id)!,
+                  project = store!
+                    .projects()
+                    .find((p) => p.id === job.projectId)!;
+                const plan = store!
+                  .operations(id)
+                  .find((o) => o.key === "workspace-plan")!
+                  .result as WorkspacePlan;
+                const refresh = async () => {
+                  context.assertActive();
+                  await intake.authorize(id);
+                  const input = await inputs.collect(
+                    plan,
+                    project,
+                    job.prNumber!,
+                  );
+                  const remote = await pulls.readiness(
+                    project.repository,
+                    job.prNumber!,
+                    project.baseBranch,
+                    input.target,
+                  );
+                  context.assertActive();
+                  return remote;
+                };
+                try {
+                  await comments.ready(context, await refresh());
+                  store!.finishReady(context.lease, await refresh());
+                } catch (error) {
+                  store!.blockAndRelease(
+                    context.lease,
+                    "readiness-check-failed",
+                  );
+                  throw error;
+                }
+              }
+            });
           } else if (command === "resume-publication") {
             const id = args[0]!;
             const proof = await agent.proveCompleted(id);
@@ -270,7 +361,7 @@ if (!command || !commands.includes(command) || !configPath) {
           } else
             result = await scheduler.runOnce((context) => worker.run(context));
           output({ result });
-          if (!["idle", "pr-open", "e2e-review"].includes(result))
+          if (!["idle", "pr-open", "e2e-review", "ready"].includes(result))
             process.exitCode = 1;
         } finally {
           agent?.close();

@@ -523,3 +523,22 @@ test("transient observation read failure retries only the read, never task or tu
   assert.equal(f.calls.filter((c) => c.method === "thread/start").length, 1);
   assert.equal(f.calls.filter((c) => c.method === "turn/start").length, 1);
 });
+
+test("E2E role starts with workflow-specific independent instructions and immutable role identity", async (t) => {
+  const f = fixture(t),
+    a = f.agent();
+  await a.start(f.context, {
+    ...f.input,
+    key: "e2e-review-1",
+    role: "e2e-review",
+    outputSchema: { type: "object" },
+  });
+  const start = f.calls.find((c) => c.method === "thread/start");
+  assert.match(start.params.developerInstructions, /actual.*workflow/i);
+  assert.match(start.params.developerInstructions, /source inspection.*alone/i);
+  assert.equal(
+    f.store.operations(f.id).find((o) => o.key === "e2e-review-1:thread").input
+      .role,
+    "e2e-review",
+  );
+});

@@ -230,4 +230,32 @@ a blocked job, retaining original identities, operations and elapsed budgets.
 Sign-off with nonempty limitations cannot enter E2E. A bounded clarification turn may
 ask the same reviewer to correct inconsistent report semantics; it cannot delete gaps
 or substitute a coordinator-authored verdict. The original report and clarification
-intent remain durable. E2E execution and full operational recovery are subsequent gates.
+intent remain durable. Build 006 supplies E2E execution and readiness; full operational recovery remains a subsequent gate.
+
+
+## E2E and readiness (Build 006)
+
+Review evidence is partitioned by role but shares immutable target bindings and a
+persistent correction budget. E2E requires a third task, the exact acceptance text
+and observed success/failure workflows; unit tests or source inspection alone cannot
+satisfy its contract. Its corrections transition through verification and code review
+before the original E2E task can revalidate. Code review may retain the current lease
+for this handoff, keeping the global single-job/turn fence intact.
+
+Readiness is a dedicated atomic completion operation; generic stage transitions
+cannot bypass its checks. `readinessEvidence` validates independent reports, original
+execution deadline, current configured command evidence, fresh PR/check state and
+notification delivery. The GitHub reader checks the owned head/base, actual base
+branch, mergeability, complete bounded check/status pages and protected-branch classic
+and ruleset requirements. Pinned check app identities must match. Missing/unavailable,
+stale, ambiguous, pending or failed evidence blocks; it does not count as a pass.
+
+The notification stores a stable owner-attributed message and outbox identity for the
+head/base, then uses exact-body/author reconciliation through `PrComments`. A fresh
+remote read follows the send before local `ready` is recorded. Later explicit rechecks
+can revoke readiness while retaining reports and notification history. Restoring an
+unchanged target reuses completed reviews and the same notification; changed targets
+need fresh reviews. The public message is a timestamped verified snapshot, not a claim
+of continuing validity or email/push delivery. Generated PRs remain drafts and no
+merge/deploy API is implemented. Service scheduling of rechecks and general recovery
+of unknown side-effect intents remain Build 007 responsibilities.

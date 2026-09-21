@@ -903,3 +903,137 @@ Build 005 acceptance is complete. Its primary commit includes implementation, te
 operator documentation and this log; Builds 006–008 and independent milestone delivery
 reviews remain pending. General recovery of unknown side-effect intents remains Build
 007 scope; explicit continuation does not erase uncertain external actions.
+
+### Build 006 — acceptance and verification contract (in progress)
+
+Build 005 is committed/pushed as `aebe9c5897e164f57449097efddffbef6fa74c38`.
+Build 006 starts on the same branch. The next increments must demonstrate: a third,
+distinct E2E task can record actual success/failure workflow evidence only after
+current-head code sign-off; code-only/source-only/missing-environment reports cannot
+mark ready; E2E fixes return through code review; remote head/base/conflicts/checks
+and unresolved findings gate readiness; durable marker-based notification reconciles
+ambiguous sends without duplicates. Readiness is revoked on later invalidation and
+never authorizes merge/deploy. Test existing state transitions and report recording
+first, then coordinator/transport and actual supervised fixture E2E. Final live gate
+must retain distinct reviewer identity, evidence and one logical readiness comment.
+
+Build 006 first red exposed an actual missing guard: direct `e2e-review → ready`
+succeeded with code-only evidence (missing expected exception). Three additional
+report-contract tests rejected the new E2E role because only code reports were
+supported. Added role-specific immutable reports, independent code/E2E identities,
+exact acceptance text and observed success/failure workflow evidence. A source-only
+report, failed workflow or unresolved environment limitation cannot sign off. These
+four tests plus the existing review ledger passed **18 tests**.
+
+E2E round red rejected `e2e-review-1` as invalid-review-round; the adapter role test
+failed invalid-agent-role (21 existing passes). Generalized the existing bounded
+round and adapter to supply workflow-specific E2E instructions/schema without changing
+implementation/code role contracts. **53 affected tests passed**.
+
+The readiness contract initially had no dedicated gated completion API (15 failing
+truth-table/API assertions). Added fresh head/base/open/mergeable/check evidence,
+configured current-head command results, separate matching sign-offs and reconciled
+notification requirements; direct stage transitions remain forbidden. Initial green
+exposed a nested SQLite transaction error in evidence recording. Fixed it with one
+atomic readiness evidence/state transaction; **37 affected tests passed**. Revocation
+preserves review and notification evidence and exposes a blocked state.
+
+The E2E correction integration initially lacked an E2E claim (3 passes/1 failure).
+Generalized bounded coordinator rounds: an E2E correction is committed, verified and
+pushed through the existing publication path, then returns to the original code
+reviewer before the distinct E2E reviewer revalidates. The test uses real Git and
+isolated verification with simulated model/GitHub boundaries. It proves the order
+code → E2E finding → correction → code → E2E sign-off; **33 affected tests passed**.
+This is integration evidence, not a claim of a live model finding in Build 006.
+
+GitHub readiness adapter tests initially lacked the new reader (4 failures). The
+reader checks the exact PR and current base, bounded complete check/status pages,
+classic/ruleset requirements on protected branches, and re-reads the PR for drift.
+Unavailable reads, conflicts and unresolved checks fail closed. A test routing bug
+initially confused branch and rules endpoints; corrected the fixture and **19 affected
+tests passed**. Adapter design was checked against the official GitHub REST docs for
+[pulls](https://docs.github.com/en/rest/pulls/pulls#get-a-pull-request),
+[commit statuses](https://docs.github.com/en/rest/commits/statuses#get-the-combined-status-for-a-specific-reference),
+[check runs](https://docs.github.com/en/rest/checks/runs#list-check-runs-for-a-git-reference)
+and [branch rules](https://docs.github.com/en/rest/repos/rules#get-rules-for-a-branch).
+
+Four readiness-notification tests initially failed because delivery was not wired.
+The implementation now persists a stable attributed message and outbox intent, uses
+exact marker/body/author reconciliation, and acknowledges only observed delivery.
+A lost response after acceptance recovers without another POST; uncertain absence
+retains its reservation; withdrawn authorization creates no notification. **23 affected
+tests passed**. The comment includes owner, exact head/base, verification/check and
+review evidence and remaining human approval; it does not claim email/push delivery.
+
+Initial full `npm run check` exited 0: **218 tests passed** (48 unit, 166 integration,
+4 CLI E2E) plus strict TypeScript; `git diff --check` passed. Evidence files are
+`006-e2e-evidence-{red,green}.txt`, `006-e2e-agent-red.txt`,
+`006-e2e-round-{red,green}.txt`, `006-readiness-{red,green}.txt`,
+`006-e2e-cycle-{red,green}.txt`, `006-github-readiness-{red,green}.txt`,
+`006-notification-{red,green}.txt`, and `006-initial-check.txt` under ignored build output.
+
+A live read of fixture PR #9 confirmed exact head/base, open/mergeable state and no
+reported/required GitHub checks. Configured local verification remains mandatory.
+The supervised `rehearse-e2e.mjs` continuation is now running against the existing
+Build 005 job/PR, preserving original task and elapsed budget. Its evidence path is
+`harness/build/006-live-e2e.json`. Do not relaunch while its execution or remote turn
+is unresolved. Live E2E acceptance and Build 006 completion are not yet claimed.
+
+### Build 006 — live E2E, readiness revocation/recovery and primary delivery
+
+Live E2E completed on fixture [PR #9](https://github.com/talaniz/prime-mover-fixture/pull/9)
+at unchanged head `e551f21f408e05d351aca388ca07a8908c5d8772`, base
+`eee4090de3540b66a25e2ee9195ada3bbec68f00`. Task
+`01a0c15c-f598-7a23-959d-0a9caf4980ca`, turn
+`01a0c15c-f68e-7be0-be4d-5718f062a345`, differs from both the original implementer and
+code reviewer. It published [exact-head E2E sign-off](https://github.com/talaniz/prime-mover-fixture/pull/9#issuecomment-5753880051)
+after actual module invocations covering normal input, outer trimming, preserved
+internal spaces, empty/whitespace and multiple non-string rejection cases, and normal
+operation after failures. All 17 fixture tests passed. It independently ran restored
+regression coverage against the prior broken implementation and observed the expected
+one failure. No files were edited, no environment gap was waived and no replacement
+task was used. Both independent reports cover all three commits and the same head/base.
+
+The coordinator published exactly one [owner readiness comment](https://github.com/talaniz/prime-mover-fixture/pull/9#issuecomment-5753881270),
+then rechecked remote evidence and released the job to `ready`. The acceptance driver
+independently invoked the module in the isolated workspace, checked distinct reviewer
+identities, exact remote head/base, one acknowledged notification, no lease/turn/pending
+operations and a successful `recheck-ready`. Evidence: `006-live-e2e.json`; completed
+2026-09-21 00:30 UTC. These are attributed comments, not formal GitHub approvals.
+
+A final contract inspection identified a deadline gap in readiness completion. Added
+an expired-budget assertion that failed with a missing expected exception (16 passes,
+1 failure); readiness now requires the original execution deadline while entering
+ready. Rechecking an already-ready result does not expire an otherwise valid delivery
+merely because execution time has elapsed. Added a required-app identity regression
+(reject wrong app with the same check name, accept the pinned app). **30 affected tests
+passed** after the change; `006-deadline-{red,green}.txt` records the actual results.
+
+The live recovery gate injected `failure` for fixture commit status
+`prime-mover-fixture/readiness-gate`. `recheck-ready` exited 1 and changed `ready` to
+`blocked/readiness-check-failed`. The status was then restored to `success`; explicit
+completed-task continuation returned through code and E2E gates to `ready`. Recheck
+passed. All seven original model turn IDs and the original absolute job deadline were
+unchanged; there were **zero new turns**, one readiness outbox record and exactly one
+remote readiness comment. This tests real GitHub check failure, revocation and recovery,
+not an assumed notification retry. Evidence: `006-live-readiness-recovery.json`,
+completed 2026-09-21 00:32 UTC. The fixture status remains successful. A fresh GitHub
+read confirms PR #9 is still open and draft on the reviewed head/base.
+
+Final `npm run check` exited 0: **220 passed** (48 unit, 168 integration, 4 CLI E2E),
+strict TypeScript and whitespace checks passed (`006-final-check.txt`). Shared review
+coordination was extended instead of duplicating correction/publication machinery;
+the prior implementation and code-review regressions remain green. Build 006 is
+complete; its primary commit contains code, tests, live scripts, operator documentation
+and this log. Builds 007–008, DOOM integration, CI and independent milestone reviews
+remain pending. No production service, merge or deployment was activated.
+
+Pre-commit diff review found an asymmetric reviewer-identity guard: the E2E task was
+rejected as the first code reviewer, but a later code report could reuse its ID under
+a newly recorded code-role key. A focused regression produced 4 passes/1 failure
+(missing expected exception, `006-independence-red.txt`). The evidence store now rejects
+any reviewer identity already owned by implementation or the other review role,
+independently of operation-key prefixes. Existing live reviewers are distinct and
+remain valid. Final post-fix `npm run check` exited 0 with **221 passes** (48 unit,
+169 integration, 4 CLI E2E), no failures/skips; latest `006-final-check.txt` supersedes
+the earlier 220-test run. Credential/artifact scan and staged whitespace checks passed.

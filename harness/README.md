@@ -2,7 +2,7 @@
 
 One milestone: **Minimum Viable Application (MVA)**. One application implementation
 branch and PR hold all build commits and subsequent review fixes/release notes.
-Application execution is in progress: Builds 001–005 are complete; builds 006–008 remain pending.
+Application execution is in progress: Builds 001–006 are complete; builds 007–008 remain pending.
 The execution log contains actual evidence and remaining gates.
 
 ## Layout

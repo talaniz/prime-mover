@@ -1,3 +1,5 @@
+import { readRemoteReadiness } from "./github-readiness.js";
+import type { ReviewTarget } from "./reviews.js";
 import { randomUUID } from "node:crypto";
 import type { Store } from "./store.js";
 import type { WorkContext } from "./scheduler.js";
@@ -62,6 +64,20 @@ function pull(repository: string, value: unknown): PublishedPull {
 /** The worker owns creation; all generated PRs remain draft pending independent review. */
 export class GitHubPulls implements PullApi {
   constructor(private readonly transport: Transport = ghTransport) {}
+  async readiness(
+    repository: string,
+    number: number,
+    branch: string,
+    target: ReviewTarget,
+  ) {
+    return readRemoteReadiness(
+      this.transport,
+      repository,
+      number,
+      branch,
+      target,
+    );
+  }
   async list(repository: string, branch: string): Promise<PublishedPull[]> {
     repo(repository);
     const result: PublishedPull[] = [];

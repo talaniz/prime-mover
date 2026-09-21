@@ -1,3 +1,4 @@
+import { readinessEvidence, type RemoteReadiness } from "./readiness.js";
 import { randomUUID } from "node:crypto";
 import type { Store } from "./store.js";
 import type { WorkContext } from "./scheduler.js";
@@ -16,6 +17,62 @@ export class PrComments {
     private readonly github: Pick<GitHub, "identity" | "comments" | "comment">,
     private readonly authorize: (id: string) => Promise<unknown>,
   ) {}
+  async ready(context: WorkContext, remote: RemoteReadiness): Promise<string> {
+    context.assertActive();
+    const job = this.store.job(context.lease.jobId)!;
+    await this.authorize(job.id);
+    context.assertActive();
+    const evidence = readinessEvidence(this.store, job.id, remote);
+    const key = `ready-${remote.head}-${remote.base}`;
+    if (
+      job.prNumber === null ||
+      job.activeTurnId ||
+      job.stage !== "e2e-review" ||
+      this.store
+        .operations(job.id)
+        .some((o) => o.status === "pending" && o.key !== `pr-comment:${key}`) ||
+      this.store
+        .notifications(job.id)
+        .some(
+          (n) => n.status === "pending" && n.kind !== evidence.notificationKind,
+        )
+    )
+      throw new Error(
+        "Readiness notification requires reconciled reviews and side effects",
+      );
+    const project = this.store.projects().find((p) => p.id === job.projectId)!;
+    const messageKey = `ready-message:${remote.head}:${remote.base}`;
+    const previous = this.store
+      .operations(job.id)
+      .find((o) => o.key === messageKey);
+    let body: string;
+    if (previous) {
+      if (
+        previous.status !== "done" ||
+        JSON.stringify(previous.input) !== JSON.stringify(evidence.payload)
+      )
+        throw new Error("Readiness message requires reconciliation");
+      body = (previous.result as { body: string }).body;
+    } else {
+      body = `${project.maintainers.map((owner) => `@${owner}`).join(" ")} Ready for owner review.\n\nPR: https://github.com/${job.repository}/pull/${job.prNumber}\nHead: ${remote.head}\nBase: ${remote.base}\nVerified snapshot: ${new Date(remote.observedAt).toISOString()}\n\nIndependent code review: ${evidence.payload.codeReview}\nIndependent E2E review: ${evidence.payload.e2eReview}\n\nConfigured current-head verification passed:\n${project.verify.map((argv) => `- ${JSON.stringify(argv)}: exit 0`).join("\n")}\n\nGitHub checks:\n${remote.checks.length ? remote.checks.map((c) => `- ${c.name}: ${c.status} (${c.url})`).join("\n") : "No GitHub checks are configured or reported for this verified snapshot."}\n\nBoth independent reviews cover this exact head. Later head/base changes, failed checks or withdrawn authorization invalidate readiness. Human approval is still required to merge and deploy. Prime Mover does neither automatically. This comment does not assert email or push delivery.`;
+      this.store.operation(
+        context.lease,
+        messageKey,
+        "readiness-message",
+        evidence.payload,
+      );
+      this.store.completeOperation(context.lease, messageKey, { body });
+    }
+    const notification = this.store.notification(
+      context.lease,
+      evidence.notificationKind,
+      evidence.payload,
+    );
+    const url = await this.publish(context, key, job.prNumber, body);
+    const id = url.split("#issuecomment-")[1]!;
+    this.store.acknowledgeNotification(context.lease, notification.id, id);
+    return url;
+  }
   private async find(input: CommentIntent): Promise<Comment[]> {
     const matches: Comment[] = [];
     const seen = new Set<string>();

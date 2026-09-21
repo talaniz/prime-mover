@@ -83,7 +83,9 @@ async function fixture(t, mode = "success") {
   const comments = [];
   let posts = 0,
     fixes = 0,
-    reviews = 0;
+    reviews = 0,
+    e2eReviews = 0;
+  const roles = [];
   const taskIds = [];
   const pull = {
     number: 3,
@@ -161,12 +163,17 @@ async function fixture(t, mode = "success") {
       store.completeOperation(ctx.lease, `${key}:thread`, old.result);
     },
     start: async (ctx, input) => {
+      roles.push(input.role ?? "implementation");
       let task = store
         .operations(id)
         .find((o) => o.key === `${input.key}:thread`);
       if (!task) {
         const threadId =
-          input.role === "code-review" ? "independent-reviewer" : "implementer";
+          input.role === "e2e-review"
+            ? "independent-e2e-reviewer"
+            : input.role === "code-review"
+              ? "independent-reviewer"
+              : "implementer";
         store.operation(ctx.lease, `${input.key}:thread`, "thread-start", {
           role: input.role ?? "implementation",
           cwd: plan.cwd,
@@ -186,8 +193,13 @@ async function fixture(t, mode = "success") {
       });
       store.completeOperation(ctx.lease, `${input.key}:turn`, { turnId });
       store.recordObservedTurn(ctx.lease, threadId, turnId);
-      if (input.role === "code-review") {
-        reviews++;
+      if (input.role === "code-review" || input.role === "e2e-review") {
+        const e2e = input.role === "e2e-review";
+        if (e2e) e2eReviews++;
+        else reviews++;
+        const hasFinding = e2e
+          ? e2eReviews === 1
+          : mode !== "e2e" && reviews === 1;
         const shas = git(
           plan.cwd,
           "rev-list",
@@ -195,7 +207,7 @@ async function fixture(t, mode = "success") {
           `${plan.baseSha}..HEAD`,
         ).split("\n");
         const finding = {
-          id: "code-review-1-F1",
+          id: mode === "e2e" ? "e2e-review-1-F1" : "code-review-1-F1",
           severity: "P1",
           file: "README.md",
           line: 1,
@@ -210,12 +222,36 @@ async function fixture(t, mode = "success") {
             head: shas.at(-1),
             base: plan.baseSha,
             commits: shas,
-            verdict: reviews === 1 ? "changes-requested" : "sign-off",
+            verdict: hasFinding ? "changes-requested" : "sign-off",
+            ...(e2e
+              ? {
+                  acceptance: contract.acceptance,
+                  workflows: [
+                    {
+                      kind: "success",
+                      scenario: "Read actual README",
+                      expected: "Corrected",
+                      observed: readFileSync(
+                        join(plan.cwd, "README.md"),
+                        "utf8",
+                      ),
+                      passed: !hasFinding,
+                    },
+                    {
+                      kind: "failure",
+                      scenario: "Reject wrong content",
+                      expected: "Mismatch detected",
+                      observed: "Regression rejects wrong content",
+                      passed: true,
+                    },
+                  ],
+                }
+              : {}),
             checks: ["Inspected all commits and actual README"],
             limitations: [],
-            findings: reviews === 1 ? [finding] : [],
+            findings: hasFinding ? [finding] : [],
             resolutions:
-              reviews === 1
+              hasFinding || (mode === "e2e" && !e2e)
                 ? []
                 : [
                     {
@@ -226,14 +262,18 @@ async function fixture(t, mode = "success") {
                   ],
           }),
         );
-      } else if (input.key.startsWith("triage-")) {
+      } else if (input.key.includes("triage-")) {
         results.set(
           turnId,
           JSON.stringify({
             dispositions: [
               {
                 findingId:
-                  mode === "invalid-triage" ? "unknown" : "code-review-1-F1",
+                  mode === "invalid-triage"
+                    ? "unknown"
+                    : mode === "e2e"
+                      ? "e2e-review-1-F1"
+                      : "code-review-1-F1",
                 decision: "accepted",
                 reason: "Reproduced requested content mismatch",
                 acceptance: contract.acceptance,
@@ -292,6 +332,15 @@ async function fixture(t, mode = "success") {
   return {
     store,
     id,
+    config,
+    roles,
+    services: {
+      agent,
+      inputs: new ReviewInputs(trees, api),
+      comments: new PrComments(store, github, intake.authorize),
+      publication,
+      intake,
+    },
     plan,
     remote,
     reviewLease,
@@ -344,3 +393,59 @@ for (const mode of ["failed-check", "invalid-triage"])
     assert.equal(f.fixes, mode === "invalid-triage" ? 0 : 1);
     assert.notEqual(f.store.job(f.id).stage, "e2e-review");
   });
+
+test("E2E workflow finding returns corrected code through code review before a fresh E2E sign-off", async (t) => {
+  const f = await fixture(t, "e2e");
+  assert.equal(
+    await f.scheduler.runClaimed(f.reviewLease, (ctx) =>
+      f.coordinator.run(ctx),
+    ),
+    "e2e-review",
+  );
+  const lease = f.store.claimE2EReview(f.id, "reviewer", 60000);
+  const e2e = new ReviewCoordinator(f.store, f.config, f.services, {
+    pollMs: 1,
+    role: "e2e-review",
+  });
+  const result = await f.scheduler.runClaimed(lease, async (ctx) => {
+    await e2e.run(ctx);
+    const reports = f.store
+      .operations(f.id)
+      .filter((o) => o.kind === "e2e-review-report")
+      .map((o) => o.result);
+    assert.equal(reports.length, 2);
+    assert.equal(reports[0].verdict, "changes-requested");
+    assert.equal(reports[1].verdict, "sign-off");
+    const code = f.store
+      .operations(f.id)
+      .filter((o) => o.kind === "code-review-report")
+      .at(-1).result;
+    assert.equal(code.head, reports[1].head);
+    assert.notEqual(code.taskId, reports[1].taskId);
+    const target = { head: code.head, base: code.base, commits: code.commits };
+    const n = f.store.notification(lease, `ready:${code.head}:${code.base}`, {
+      ...target,
+      codeReview: code.reportUrl,
+      e2eReview: reports[1].reportUrl,
+    });
+    f.store.acknowledgeNotification(lease, n.id, "100");
+    f.store.finishReady(lease, {
+      ...target,
+      observedAt: Date.now(),
+      open: true,
+      mergeable: true,
+      checks: [],
+      requiredChecks: [],
+    });
+  });
+  assert.equal(result, "ready");
+  assert.equal(f.fixes, 1);
+  assert.deepEqual(
+    f.roles.filter((r) => r !== "implementation"),
+    ["code-review", "e2e-review", "code-review", "e2e-review"],
+  );
+  assert.deepEqual(f.taskIds, [
+    "independent-reviewer",
+    "independent-e2e-reviewer",
+  ]);
+});

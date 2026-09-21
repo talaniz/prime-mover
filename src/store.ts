@@ -1,6 +1,7 @@
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { randomUUID } from "node:crypto";
 import { Reviews } from "./reviews.js";
+import { readinessEvidence, type RemoteReadiness } from "./readiness.js";
 import type { ProjectConfig } from "./config.js";
 import type { JobStage } from "./contracts.js";
 
@@ -644,7 +645,11 @@ export class Store {
           throw new Error("Current-head code-review sign-off is required");
         reviews.requireCodeSignoff(j.id, target);
       }
-      if (j.activeTurnId && (terminal.has(stage) || stage === "ready"))
+      if (stage === "ready")
+        throw new Error(
+          "Readiness requires independently verified E2E and current remote evidence",
+        );
+      if (j.activeTurnId && terminal.has(stage))
         throw new Error("Cannot finish job with an active turn");
       if (
         j.cancelRequested &&
@@ -914,6 +919,17 @@ export class Store {
     });
   }
   claimCodeReview(id: string, owner: string, duration: number): Lease {
+    return this.claimReview(id, owner, duration, "code-review");
+  }
+  claimE2EReview(id: string, owner: string, duration: number): Lease {
+    return this.claimReview(id, owner, duration, "e2e-review");
+  }
+  private claimReview(
+    id: string,
+    owner: string,
+    duration: number,
+    role: "code-review" | "e2e-review",
+  ): Lease {
     required(owner);
     if (!Number.isSafeInteger(duration) || duration < 1)
       throw new Error("Invalid review claim duration");
@@ -921,7 +937,7 @@ export class Store {
       const job = this.job(id);
       if (
         !job ||
-        job.stage !== "pr-open" ||
+        job.stage !== (role === "code-review" ? "pr-open" : "e2e-review") ||
         job.prNumber === null ||
         job.cancelRequested ||
         this.one("SELECT intake_invalid FROM jobs WHERE id=?", id)
@@ -946,10 +962,18 @@ export class Store {
       );
       if (!project?.enabled || !project.configured || project.block_code)
         throw new Error("Review claim project is unavailable");
+      if (role === "e2e-review") {
+        const reviews = new Reviews(this),
+          target = reviews.current(id);
+        if (!target)
+          throw new Error("Current-head code-review sign-off is required");
+        reviews.requireCodeSignoff(id, target);
+      }
       const epoch = job.leaseEpoch + 1,
         attempt = job.attempts + 1;
       this.run(
-        "UPDATE jobs SET stage='code-review',block_code=NULL,lease_owner=?,lease_epoch=?,lease_until=?,attempts=?,updated_at=? WHERE id=?",
+        "UPDATE jobs SET stage=?,block_code=NULL,lease_owner=?,lease_epoch=?,lease_until=?,attempts=?,updated_at=? WHERE id=?",
+        role,
         owner,
         epoch,
         this.now() + duration,
@@ -965,11 +989,64 @@ export class Store {
         epoch,
         this.now(),
       );
-      this.event(id, "code-review-claimed", { owner, epoch });
+      this.event(id, `${role}-claimed`, { owner, epoch });
       return { jobId: id, owner, epoch };
     });
   }
-  finishCodeReview(lease: Lease): void {
+  finishReady(lease: Lease, remote: RemoteReadiness): void {
+    this.transaction(() => {
+      const job = this.assertWorker(lease);
+      if (
+        job.stage !== "e2e-review" ||
+        job.activeTurnId ||
+        this.hasPending(job.id)
+      )
+        throw new Error(
+          "Readiness requires reconciled E2E and no pending work",
+        );
+      const evidence = readinessEvidence(
+        this,
+        job.id,
+        remote,
+        this.now(),
+        true,
+      );
+      const key = `readiness:${lease.epoch}`;
+      this.run(
+        "INSERT INTO operations VALUES (?,?,?,?, 'done',?,?,?)",
+        job.id,
+        key,
+        "readiness-evidence",
+        json(evidence),
+        json(evidence),
+        this.now(),
+        this.now(),
+      );
+      this.run(
+        "UPDATE jobs SET stage='ready',lease_owner=NULL,lease_until=NULL,updated_at=? WHERE id=?",
+        this.now(),
+        job.id,
+      );
+      this.event(job.id, "ready", { head: remote.head, base: remote.base });
+    });
+  }
+  revokeReadiness(id: string, code: string): void {
+    if (!/^[a-z0-9-]{1,100}$/.test(code))
+      throw new Error("Invalid readiness blocker");
+    this.transaction(() => {
+      const job = this.job(id);
+      if (!job || job.stage !== "ready" || job.leaseOwner || job.activeTurnId)
+        throw new Error("Readiness revocation requires an idle ready job");
+      this.run(
+        "UPDATE jobs SET stage='blocked',block_code=?,updated_at=? WHERE id=?",
+        code,
+        this.now(),
+        id,
+      );
+      this.event(id, "readiness-revoked", { code });
+    });
+  }
+  finishCodeReview(lease: Lease, retainLease = false): void {
     this.transaction(() => {
       const job = this.assertWorker(lease);
       if (
@@ -986,7 +1063,9 @@ export class Store {
         throw new Error("Current-head code-review sign-off is required");
       reviews.requireCodeSignoff(job.id, target);
       this.run(
-        "UPDATE jobs SET stage='e2e-review',lease_owner=NULL,lease_until=NULL,updated_at=? WHERE id=?",
+        "UPDATE jobs SET stage='e2e-review',lease_owner=?,lease_until=?,updated_at=? WHERE id=?",
+        retainLease ? job.leaseOwner : null,
+        retainLease ? job.leaseUntil : null,
         this.now(),
         job.id,
       );
