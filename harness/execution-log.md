@@ -1761,3 +1761,20 @@ submission scenarios passed through the unchanged actual intake policy (six vali
 contracts, four missing-section cases per form, absent authorization, unauthorized
 actor). No GitHub issues or execution jobs were created. Native GitHub UI validation
 remains a post-merge observation, not claimed here. Independent reviews follow.
+
+### Intake context preservation correction
+
+Main-task boundary inspection found that implementation and review prompts receive
+only the four extracted contract fields. The first forms placed bug reproduction
+and documentation locations under additional headings, so runnable=true alone did
+not prove all reporter context reached the worker. Acceptance now also requires
+every submitted textarea answer to survive in the actual extracted contract.
+Folded all type-specific prompts into the four required textareas; no parser or
+runtime behavior changed. Bug expected/actual details go in Objective, environment
+in Scope, and reproduction in Verification; documentation locations/references go
+in Scope. Guidance uses plain-text lead-ins instead of extra Markdown headings.
+The pre-fix sentinel probe demonstrated 16 omitted field values across six forms.
+Corrected verification passed 42 intake scenarios and exact preservation of all
+24 submitted answers, including bug reproduction and documentation paths.
+Independent review finding ISSUE-FORMS-1 on PR #4 confirmed this boundary; the
+forms-only correction addresses it without changing runtime behavior.
