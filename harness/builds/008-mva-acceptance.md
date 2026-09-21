@@ -2,7 +2,9 @@
 
 Milestone: **Minimum Viable Application** (the only milestone).
 Dependency: 007.
-Status: **pending**; committing this contract does not execute it.
+Status: **implemented and locally verified**; publication CI and independent product
+reviews/release-note/final-head gates remain pending. See the execution log and
+[acceptance index](../../docs/mva-acceptance.md) for actual evidence.
 Primary implementation commit trailer: `Build: 008`.
 
 ## Scope and deliverables

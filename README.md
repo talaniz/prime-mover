@@ -6,7 +6,7 @@ You set the objective. Prime Mover moves the pieces.
 
 ## Status
 
-Builds 001–007 implement integration contracts, durable scheduling, operator controls, project metadata, maintainer-authorized GitHub intake and supervised isolated implementation through a draft PR and independent code/E2E reviews with verified corrections, gated readiness and one durable notification. Build 007 adds startup recovery, supervised service cycles, resource/storage guards and backup/restore. Complete MVA acceptance and the DOOM Projects page remain under development. Production activation is blocked until the planned mount and kernel memory-controller deployment prerequisites are verified. No unattended worker is running; nothing merges automatically.
+Builds 001–007 implement integration contracts, durable scheduling, operator controls, project metadata, maintainer-authorized GitHub intake and supervised isolated implementation through a draft PR and independent code/E2E reviews with verified corrections, gated readiness and one durable notification. Build 007 adds startup recovery, supervised service cycles, resource/storage guards and backup/restore. The DOOM Projects page and supervised MVA integration are implemented; independent product reviews and final delivery gates remain in progress. Production activation is blocked until the planned mount and kernel memory-controller deployment prerequisites are verified. No unattended worker is running; nothing merges automatically.
 
 ## Intended workflow
 
@@ -56,7 +56,7 @@ Credentials, environment-specific configuration, databases and their WAL/SHM sid
 Start with [harness/README.md](harness/README.md) for the eight ordered build contracts,
 test-first commit workflow, execution log, independent reviews, and release notes.
 The application milestone is in progress; Build 001 contracts and compatibility checks
-are complete. The durable store/scheduler, metadata backend and authorized intake are implemented through Build 007; complete MVA acceptance and the dashboard remain under development.
+are complete. The durable store/scheduler, metadata backend and authorized intake are implemented through Build 007; the dashboard integration is implemented and final MVA review gates remain in progress.
 
 ## Planned default projects
 
@@ -322,3 +322,9 @@ service templates, persistent mount setup and the verified deployment limitation
 This Pi currently boots with `cgroup_disable=memory`; service preflight refuses
 unattended activation until kernel memory accounting and actual limits are verified.
 No templates have been installed/enabled, and no boot settings have been changed.
+
+## MVA acceptance evidence
+
+See [the acceptance index](docs/mva-acceptance.md) for the eight criteria, actual fixture
+PR/review/notification evidence, DOOM integration, fresh-checkout commands and remaining
+review/deployment gates. The product PRs remain subject to independent final-head reviews.

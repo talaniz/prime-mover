@@ -1407,3 +1407,139 @@ boot flag and proof of enforced memory limits remain owner-gated deployment prer
 the service preflight fails closed on the current host. These are not reported as passes.
 Build 008's complete MVA acceptance and linked DOOM Projects view remain pending, followed
 by independent milestone code/E2E reviews, release notes and final-head revalidation.
+
+## Build 008 — in progress
+
+Build 007 prerequisite is committed/pushed as
+`ff3c676bcae5733922d04f45b10c048e6d8d9c69`; remote branch equality and a clean worktree
+were verified, and milestone draft PR #3 was updated through Build 007. Build 008
+retains the complete MVA and separately reviewed DOOM Projects integration scope.
+
+DOOM work uses an isolated clone at
+`/media/talaniz/postgresdata/codex-work/repos/doom-prime-mover-mva`, branch
+`feat/prime-mover-projects`. Fresh fetch verified local main = origin/main =
+`6172f707bc87df84300502c5c761c93926a76e64` before branch creation. The live
+`/home/palpatine/doom-control-room` checkout was only inspected and remains untouched.
+Its AGENTS.md requires committed sanitized desktop/mobile screenshots and independent
+review of the actual branch UI. Acceptance remains the complete metadata contract,
+including auth, safe links/text, stale/unavailable/empty states and unrelated task access.
+
+The DOOM metadata reader is now implemented test-first: four tests failed on the missing
+module, then passed for default identities, strict projection/private-field removal,
+trusted links, bounded counts, freshness, cached outages and concurrent request sharing.
+The reader uses a fixed GET over the private Unix socket, a private token file, a 2-second
+request bound and a 1 MiB response bound. The authenticated read-only Projects API was
+then tested. Initial fixture startup lacked a mandatory admin account and its cleanup
+waited for an already-exited child; that invalid red attempt was diagnosed and fixed.
+The meaningful API red was `404 !== 200` for an authenticated GET. The implemented
+list/detail endpoints pass, permit the read-only account, reject unauthenticated reads,
+unknown IDs and writes, and do not expose token/private response fields. Five focused
+reader/API tests and syntax checks passed. Raw artifacts currently reside in
+`/tmp/doom-projects-{red,green,api-red2,api-red3,api-green}.txt`.
+
+This is only the metadata bridge increment. Rendered UI, browser interactions and
+screenshots, actual Prime Mover/DOOM integration, CI/fresh checkout, complete live
+acceptance and final independent reviews remain pending. No Build 008 primary commit
+or DOOM PR has been created yet; all changes remain isolated and reviewable.
+
+The isolated DOOM full regression suite also passed: `npm test`, **22 tests**, zero
+failures/skips (`/tmp/doom-projects-regression.txt`). Its `docs/prime-mover-projects.md`
+records the acceptance/verification contract and outstanding UI/browser/integration
+checks. Both repository whitespace checks pass. The failed first API-test process was
+explicitly terminated after its child was confirmed exited; the repaired test and full
+suite are finished. No live DOOM process was touched and no test process remains pending.
+
+#### Build 008 progress — DOOM Projects screen
+
+- Isolated DOOM branch `feat/prime-mover-projects` now has implementation commit
+  `3adaa777538f82affe1045f474a5cdcfadaf0fb9` (base
+  `6172f707bc87df84300502c5c761c93926a76e64`). Adds authenticated read-only
+  metadata bridge and list/detail Projects screen, preserving task DOM/drafts,
+  explicit snapshot freshness, loading/empty/unavailable states and scoped GitHub links.
+- DOM test increment initially failed because the new component did not exist;
+  recorded `/tmp/doom-projects-ui-red.txt`, then four behavior tests passed.
+  A subsequent meaningful focus regression failed (`undefined` rather than DOOM
+  Dashboard after refresh), then passed after preserving keyed keyboard focus.
+  `/tmp/doom-projects-focus-{red,green}.txt` records that cycle.
+- Final syntax checks pass and all **27 automated tests pass**:
+  `/tmp/doom-projects-final-check.txt`. Chromium exercised actual admin/viewer
+  sessions, list/detail, refresh, metadata outage while task controls stayed usable,
+  draft preservation, forbidden POST, logout cleanup, desktop/mobile width and no
+  JavaScript exceptions. Expanded browser run passed including empty/loading states:
+  `/tmp/doom-projects-browser-expanded.txt`.
+- Screenshot capture is running against committed DOOM UI code. Inspection, actual
+  Prime Mover metadata integration, linked PR and independent reviews remain pending.
+  These fixture browser results are not claimed as actual worker integration.
+
+- DOOM screenshot evidence committed at `78547be81800b039c787639d1ae858593b193c9c`
+  and pushed. All 14 desktop/mobile PNGs were opened and inspected; no private
+  content or horizontal overflow, with long mobile cards naturally below viewport.
+  Capture log `/tmp/doom-projects-capture.txt` passed. Native image viewing hit the
+  environment's bwrap restriction; the same unmodified PNGs were inspected through
+  tool image output from privileged read-only base64 reads.
+- Linked draft integration PR: https://github.com/talaniz/doom-control/pull/14.
+  Actual-service integration and independent review gates remain explicitly pending.
+- Current live fixture #10 / draft PR #11 was read-only inspected at `pr-open`,
+  no lease/turn/blocker. Started its existing job's `code-review` command, retaining
+  runtime, original implementation identity and deadline. Log:
+  `harness/build/008-live-code-review.log`. No new fixture issue/job was created.
+
+- DOOM actual-service Chromium integration passed against Prime Mover
+  `ff3c676bcae5733922d04f45b10c048e6d8d9c69` and DOOM
+  `78547be81800b039c787639d1ae858593b193c9c`. Actual `metadata` CLI on the verified
+  external filesystem served both default identities with synthetic jobs. Browser
+  list/detail, same-number cross-project isolation, global lease contention,
+  pause/active/queue/outcome/blocker display, unauthenticated denial and source-stop
+  stale behavior passed. Durable execution-state digest stayed unchanged across
+  reads and after source stop; unrelated task send controls remained usable.
+  `/tmp/doom-projects-real-integration-green.txt`; sanitized receipt checked into DOOM.
+- Initial actual-service attempt failed because the test chose the second card by
+  index while real registry ordering differed from its fixture. Changed the test to
+  select stable project ID. The initial failure is retained at
+  `/tmp/doom-projects-real-integration.txt`; it is not reported as a product regression.
+- Existing live fixture code review command completed successfully with result
+  `e2e-review`; started separate E2E role on the same fixture/job. Its log remains
+  `harness/build/008-live-e2e-review.log` while it runs.
+- Added least-privilege deterministic GitHub Actions workflow with explicit Node
+  22.23.2, immutable action SHAs verified from the official action repositories,
+  disabled credential persistence, no repository secrets in tests, and bounded timeout.
+  Workflow/fresh-checkout results are pending; this addition is not yet Build 008 complete.
+
+### Build 008 live/fresh-checkout acceptance results
+
+- Re-read the current Drive execution plan and mapped all MVA-1 through MVA-8
+  criteria in `docs/mva-acceptance.md`, distinguishing verified fixture evidence
+  from outstanding independent product reviews, CI and owner-approved deployment.
+- `node scripts/verify-mva-fixture.mjs harness/build/007-live-crash-recovery.json
+  harness/build/008-live-final-acceptance.json` passed. The new observation-only
+  acceptance driver continues the already recovered fixture; it starts no tasks.
+  Actual code and E2E review roles signed the same fixture head
+  `3b655d422a15d78ac66efc5196aa5edd84bcc45e` and base
+  `eee4090de3540b66a25e2ee9195ada3bbec68f00`; their task IDs differ from each other
+  and implementation. Independent valid/invalid greeting checks passed. Exactly
+  one readiness notification was found on GitHub, linked to both review reports.
+  Sanitized IDs/reports/workflows are checked in at `harness/evidence/mva-live.json`.
+- `node scripts/rehearse-readiness-recovery.mjs
+  harness/build/008-live-final-acceptance.json
+  harness/build/008-live-readiness-recovery.json` passed. Explicit fixture-only
+  failing commit status revoked readiness; restoring success and reconciliation
+  returned the job to `ready`, with **zero new turns**, the same original deadline,
+  and the same logical notification. No production repository status was changed.
+- Fresh local clone at `ff3c676bcae5733922d04f45b10c048e6d8d9c69` using
+  `npm ci --ignore-scripts` and `npm run check`: **285 passed** (77 unit,
+  199 integration, 9 CLI E2E), strict TypeScript passes, zero audit findings.
+  Commands/runtime/head recorded in `harness/build/008-fresh-check.txt`. Build 008
+  adds acceptance tooling/CI/docs; core executable code is unchanged from that head.
+- DOOM independent code reviewer `/root/doom_code_review` reviewed all three
+  initial commits and signed `618e79eed3a3299f8931a2d1960a9c0128908437`, with a
+  nonblocking P3 finding: manual Refresh loses keyboard focus during rerender.
+  Report: https://github.com/talaniz/doom-control/pull/14#issuecomment-5754850277.
+  Main accepted it. Contract: retain focus after refresh unless the user moves it
+  while waiting. Regression failed before fix, then passed with focus-away coverage;
+  28 DOOM tests and actual Chromium focus assertion passed. Fix commit
+  `28d4253ca16ba24634418826a19d088a371e74c3`; screenshots recaptured, real PM CLI
+  integration rerun passed. Re-review and separate E2E review remain required.
+- Primary Build 008 commit will collect acceptance tooling, workflow, evidence index
+  and this log. CI must run after publication; independent PM code/E2E reviews,
+  DOOM final reviews, release notes and final-head revalidation remain outstanding.
+  This is not a claim of completed MVA delivery or permission to merge/deploy.
