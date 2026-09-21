@@ -2,7 +2,7 @@
 
 Milestone: **Minimum Viable Application** (the only milestone).
 Dependency: 006.
-Status: **pending**; committing this contract does not execute it.
+Status: **complete for implementation and supervised acceptance**; see the execution log. Production activation, persistent-mount installation/boot verification and kernel memory-controller enablement remain separately owner-gated.
 Primary implementation commit trailer: `Build: 007`.
 
 ## Scope and deliverables
@@ -40,3 +40,22 @@ commands, exit statuses, representative assertions, environment and durable evid
 Document blockers and deviations honestly. Complete all build acceptance checks before
 advancing; final PR reviews/release notes occur after the implementation builds.
 Review fixes use separate `Fixes-Build: 007` commits on the same PR. Never merge or deploy.
+
+
+## Acceptance evidence
+
+- Startup recovery and CLI intake guards preserve durable ownership, original deadlines,
+  attempt budgets and uncertain side effects; the fault-boundary table is in `docs/recovery.md`.
+- Fault tests cover missing/read-only/wrong/full mounts, space/inode reserve and memory
+  evidence before execution; no root-volume fallback is created.
+- Live fixture #10 / draft PR #11 recovered an actual SIGKILLed worker with unchanged
+  task/turn intents and deadline, advanced lease epoch, verified output and no replacement turn.
+- Live SQLite-consistent backup and paused isolated restore preserved ledger/budget records.
+- Temporary systemd units proved ordered dependency start, blocked prerequisite execution,
+  sequential cycles and shutdown. Production templates and proposed UUID mount entry validate.
+- The resource audit verified CPU/task constraints but discovered disabled kernel memory
+  accounting. Service preflight now blocks unattended activation; no hard memory-cap or
+  physical reboot claim is made. Enable and verify these during the approved deployment window.
+
+The implementation gate does not authorize unattended operation on the current host.
+Complete MVA acceptance, independent milestone reviews and release notes remain Build 008/final delivery work.

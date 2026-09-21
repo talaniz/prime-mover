@@ -1037,3 +1037,373 @@ independently of operation-key prefixes. Existing live reviewers are distinct an
 remain valid. Final post-fix `npm run check` exited 0 with **221 passes** (48 unit,
 169 integration, 4 CLI E2E), no failures/skips; latest `006-final-check.txt` supersedes
 the earlier 220-test run. Credential/artifact scan and staged whitespace checks passed.
+
+### Build 007 — acceptance and verification contract (in progress)
+
+Build 006 is committed/pushed as `8267357fcfda471fda0e65f42526ccba256a60e7` on the
+same milestone PR. Build 007 must reconcile every nonterminal job and pending side
+effect before intake; uncertain external ownership remains fenced. Existing live
+fixture #8/PR #9 is ready with its successful supervised status and retained evidence.
+Do not reset its database or original deadlines to simulate recovery.
+
+First increment: injectable mount/space evidence must reject wrong UUID, read-only,
+full/low-space or inode-exhausted storage before runtime directories/SQLite are created;
+no fallback to the Pi root volume. Preserve existing symlink/device checks. Subsequent
+increments cover persisted retry/deadline recovery, stage-aware startup reconciliation,
+redacted diagnostics, bounded worker/service operation, SQLite-consistent backup and
+isolated restore, retention and supervised service/dependency restart. Unknown writes
+must never be guessed absent or blindly replayed. Define fault outcomes per boundary
+in a checked-in recovery matrix, then prove them with tests and supervised evidence.
+
+Initial read-only Pi observations: expected ext4 UUID is mounted rw at
+`/media/talaniz/postgresdata`, approximately 28 GiB available; memory reports about
+1.9 GiB available of 3.8 GiB, with the existing 199 MiB swap fully used. `/etc/fstab`
+contains only root/boot/proc entries, so persistent external mounting is not proven by
+that file. No matching codex/app-server unit file was found in the inspected system
+or user unit directories. The existing daemon socket remains usable; do not assume
+it is managed by a named systemd service or restart it. Ship explicit mount/dependency
+contracts and prove supervised ordering without enabling production service or changing
+unrelated DOOM/PostgreSQL/n8n data. Production installation/activation stays owner-gated.
+
+Build 007 storage increment: the initial injected-probe test failed because storage
+preflight had no injection boundary (9 passes/1 failure). After introducing a native
+mount/statfs probe with unchanged mount semantics, the four intended capacity cases
+failed with missing expected exceptions: full, low-space, inode exhaustion and unknown
+capacity (6 passes/4 failures). Added an optional positive `storage.minFreeBytes`,
+default 512 MiB, preserving older configuration round trips. Its configuration test
+first failed on the unsupported field (23 passes/1 failure). Preflight now checks
+available bytes and inodes before creating runtime state; wrong UUID/read-only/symlink
+and device guards remain. **38 storage/config/CLI tests passed**. Evidence:
+`007-storage-red.txt`, `007-storage-capacity-red.txt`, `007-config-reserve-red.txt`,
+`007-storage-green.txt`.
+
+Backup/restore increment: three new API tests failed because snapshot/restore methods
+were absent. Added Node's SQLite online-backup API with exclusive mode-0600 destination,
+60-second progress budget, schema/integrity/foreign-key checks, streaming SHA-256 and
+standalone snapshot validation. Restore copies only to a new file, refuses existing
+main/sidecar files and corrupt input, and verifies the copied snapshot before accepting
+it. **21 backup/store tests passed**, including a second writer's WAL commit, preserved
+leases, unknown task intent and consumed retry budget. Evidence:
+`007-backup-{red,green}.txt`.
+
+Two operator CLI tests initially failed because `backup` and `restore-check` were
+unknown commands. Added mount-guarded, path-scoped commands: backups must be below the
+runtime's `backups/`, isolated restores below `restores/`. Restore validation pauses the
+copied database and starts no execution. Existing output is never overwritten.
+**9 backup/CLI tests passed**, including attempted active-database overwrite and path
+escape (`007-backup-cli-{red,green}.txt`). These are database snapshots only: external
+workspaces/artifacts and credentials are not copied; complete recovery instructions
+must make that distinction explicit and must not run a restored clone concurrently.
+
+Supervised live backup/isolated restore passed against the existing fixture runtime
+at 2026-09-21 00:53 UTC. Snapshot SHA-256
+`bc0fd0a33bcb9b4b2efa0e7ab2cbdfd4378e617cdf1933bf9e30c611973cec45`, schema 2,
+contains **1 job, 56 operations and 157 events**. Jobs, operations and consumed budgets
+match the source; the source remains ready/unpaused, the restored copy is paused and
+no model execution starts. Backup mode is 0600. Evidence:
+`007-live-backup.json`, `007-live-restore.json`, `007-live-backup-proof.json`.
+The private files remain under the fixture runtime's backups/restores directories.
+
+Build 007 is still in progress and uncommitted. Startup/stage reconciliation, persisted
+transport recovery budgets, worker/service orchestration, resource diagnostics,
+retention/runbooks and supervised service/dependency restart gates remain. Do not create
+a partial primary Build 007 commit or claim MVA readiness. Existing fixture job/PR
+and all earlier evidence remain intact for subsequent controlled rehearsals.
+
+Startup recovery primitives now have test-first coverage. Four recovery-lease tests
+initially failed because adoption/continuation APIs were absent. `claimRecovery` now
+fences an expired owner with a new epoch while preserving stage, task/turn IDs and all
+pending intents; live leases and competing reservations cannot be adopted.
+`resumeRecovery` atomically preserves the original deadline, charges a durable bounded
+recovery-attempt budget and resumes only a publication-compatible stage. Cancellation
+or an expired execution deadline permits observation ownership but forbids continuation.
+**47 store/adapter/backup/recovery tests passed** (`007-recovery-lease-{red,green}.txt`).
+
+Three app-server reconciliation tests initially failed on the absent recovery API
+(22 existing passes). `reconcileRecorded` now correlates only persisted source/cwd and
+client message IDs, verifies owned history, and records accepted identities even after
+cancellation. It sends neither thread/start nor turn/start. A lost accepted turn can
+be interrupted only after exact ownership is established; a missing uncertain send
+remains pending and is never replayed. A uniquely correlated empty task is recorded
+without starting a replacement or a turn. **29 adapter/recovery tests passed**
+(`007-agent-recovery-{red,green}.txt`). These are adapter primitives, not yet a complete
+startup coordinator. `docs/recovery.md` records the required fault outcomes and the
+scope of database-only backup/restore. No partial Build 007 commit has been made.
+
+The recovery scheduler now supports observation under a valid fencing lease after
+cancellation or authorization withdrawal, without relaxing `assertActive` for new
+execution. Two new tests first failed at the old scheduler's cancellation guard
+(`007-scheduler-recovery-red.txt`: 2 pass, 2 fail). Recovery renews only ownership
+while aborting the execution signal; a terminal owned turn can finalize cancellation,
+whereas uncertain remote state retains its reservation. A successor epoch fences the
+old observer and aborts its signal. **34 scheduler/recovery/adapter tests passed**
+(`007-scheduler-recovery-green.txt`).
+
+The pre-intent crash window also has test-first coverage: two new tests failed on the
+missing budget-recovery API (`007-initial-budget-red.txt`: 4 pass, 2 fail).
+`recoverExecutionBudget` uses the earliest persisted claim time, never restart time,
+and preserves an existing deadline even if configuration changes. Missing budgets
+with existing operations, pending notifications, task/turn identity or publication
+require reconciliation; expired budgets cannot be recreated. The first implementation
+exposed a nested SQLite transaction (53 pass, 1 fail, retained in
+`007-initial-budget-nested-transaction-failure.txt`); replacing it with a single atomic
+budget record/event transaction produced **54 passing recovery, scheduler, store and
+adapter tests** (`007-initial-budget-green.txt`). Strict compilation and diff whitespace
+checks also passed. These APIs still require startup coordinator wiring; Build 007
+remains in progress with no primary commit yet.
+
+Startup reconciliation is now wired ahead of `run-once`, with a separate
+`recover-once CONFIG` command that cannot claim a new queued job. Five startup tests
+first failed on the missing coordinator (`007-startup-red.txt`). The coordinator
+scans all jobs and pending operations/notifications, leaves live leases untouched,
+fences one expired owner, refreshes authorization, observes only the latest recorded
+owned task/turn, and permits the recorded workflow to continue only within its original
+deadline and durable recovery-attempt limit. Withdrawal/expiry permits observation and
+stopping only; failed turns and uncertain responses do not start replacements. Ordinary
+blocked jobs without outstanding ownership/intents are not automatically retried.
+Seven startup behavior cases now include expiry and terminal turn failure.
+
+Eight route tests first failed on the missing route selector
+(`007-recovery-route-red.txt`). Recovery restores implementation, review, correction
+or post-correction verification stages from persisted cycles, preserving pending
+correction targets and routing completed E2E fixes through fresh code review. The CLI
+shares its existing review/readiness delivery path with recovery. The initial extraction
+needed TypeScript narrowing fixes for captured Store references; no check was waived.
+Focused wiring checks passed **28 tests** (`007-startup-wiring-green.txt`), then
+`npm run check` passed strict TypeScript plus **262 tests: 65 unit, 191 integration,
+6 CLI E2E** (`007-startup-full-check.txt`). `git diff --check` passed.
+
+A supervised live `recover-once` against fixture #8 / draft PR #9 returned `clear`
+at 2026-09-21 01:33:48 UTC, exit 0. Exact before/after comparison of jobs, operations,
+events, budgets, outbox and attempts found no changes: 1 job, 56 operations, 157 events,
+1 budget, 1 notification, 8 attempts. The job remains ready with no active turn/lease;
+no new task or model turn was requested. Evidence: `007-live-clear-recovery.json`.
+This proves the clear-ledger path, not a live interrupted-worker restart. Expanded
+crash-point tests, persisted transport limits, service orchestration/resources/retention,
+and supervised dependency/restart gates remain before the Build 007 primary commit.
+
+Transport read failures now consume the durable per-job `transport-failures` budget,
+using configured `limits.transportAttempts`. A new adapter test first failed because
+retries returned `agent-observation-unavailable` and reset per call
+(`007-transport-red.txt`: 25 pass, 1 fail). The passing test closes/reopens SQLite,
+constructs another adapter, proves no extra execution read or replacement task starts
+after exhaustion, then proves bounded observation can still stop the exact owned turn.
+Read-only diagnostic/stop attempts remain bounded; task/turn writes are never retried.
+Private exception text is not persisted. Startup treats exhausted transport allowance
+as observation-only. **33 adapter/startup tests passed** (`007-transport-green.txt`).
+
+An additional startup test exposed observation of the newest task while an older task
+send remained uncertain (`007-ambiguous-intents-red.txt`: 7 pass, 1 fail). Startup now
+refuses competing pending task/turn identities before selecting any remote task; all
+intents remain reserved. Full `npm run check` passed strict TypeScript and **264 tests:
+65 unit, 193 integration, 6 CLI E2E** (`007-transport-full-check.txt`). Diff whitespace
+checks passed. Build 007 remains uncommitted pending its complete exit gates.
+
+The Pi supports temporary user-service supervision: `systemd-run --user --wait
+--collect --unit=prime-mover-build007-capability-probe --property=RuntimeMaxSec=10
+/usr/bin/true` completed successfully (exit 0, 3 ms service runtime). This is a capability
+probe only; it neither installs/enables a production service nor proves worker restart,
+mount ordering or app-server dependencies. Those supervised gates remain mandatory.
+
+The `cycle CONFIG` command now drives a single supervised workflow stage: storage and
+app-server connection preflight, startup recovery, ready-result revalidation, then
+one pending review stage or intake plus one implementation. Non-clear recovery stops
+the cycle before intake. Paused intake revalidates ready results but starts no review
+or implementation. Five cycle tests first failed because orchestration was absent
+(`007-worker-cycle-red.txt`), then passed (`007-worker-cycle-green.txt`). Readiness
+revalidation is shared with `recheck-ready`, and the existing review/readiness handler
+is reused. Initial CLI extraction errors (duplicate helper in backup branch and
+nullable captured Store) were caught by strict compilation and fixed before validation.
+
+Evidence correction: focused commands naming `test/e2e/cli.test.mjs` did not run CLI
+checks because that file does not exist; Node ignored the nonexistent path. The earlier
+28-test startup wiring run and the 5-test cycle run therefore provide focused coverage
+only. Full `npm run check` uses the actual `test/e2e/*.test.mjs` files and has passed:
+**269 tests, 70 unit + 193 integration + 6 CLI E2E**, plus strict TypeScript
+(`007-cycle-full-check.txt`). Prior full-suite totals remain valid. No nonexistent test
+path is counted as evidence of CLI behavior. `git diff --check` passed.
+
+A separate empty runtime was created at
+`/media/talaniz/postgresdata/codex-work/operations-rehearsal-uvwzptef`, mode 0700,
+with a private configuration and intake paused. It does not reuse the live fixture's
+ledger. A temporary `systemd-run --user --wait --collect --pipe` unit executed the real
+`cycle` command on 2026-09-21 01:47:23 UTC: exit 0, result `paused`, runtime 1.080 seconds.
+A second unit with an intentionally nonexistent app-server socket exited 1 at 01:47:54
+UTC with `App-server connection failed`; jobs, operations and attempts remained zero.
+Evidence: `007-operations-runtime.json`, `007-service-cycle-proof.json`, and
+`007-service-missing-dependency-proof.json`. Both units were collected; no persistent
+production service was installed or enabled. This proves supervised cycle execution
+and fail-closed dependency absence, not continuous service restart or boot mount ordering.
+Those gates, service templates/resources/retention and live interrupted-work recovery
+remain before completing Build 007. No partial primary commit has been made.
+
+Graceful shutdown now propagates an external abort signal through the scheduler and
+startup recovery. Two new scheduler tests first failed (`007-shutdown-red.txt`: 5 pass,
+2 fail). A stopping service cannot claim queued work; an active handler sees cancellation
+while retaining its owned turn until terminal reconciliation. **41 scheduler/startup/
+adapter tests passed** (`007-shutdown-green.txt`). CLI execution installs/removes scoped
+SIGTERM/SIGINT handlers and checks shutdown before cycle intake/review claims.
+
+A sequential service loop and `scripts/worker-service.mjs` now run fresh cycle processes
+with bounded consecutive failures, interruptible intervals and optional finite cycles.
+Three loop tests first failed on the absent implementation, then **10 loop/scheduler
+tests passed** (`007-service-loop-{red,green}.txt`). Shutdown forwards SIGTERM to the
+active cycle and allows 45 seconds for owned-work reconciliation before a forced child
+group exit; uncertainty remains durable. Full `npm run check` passed strict TypeScript
+and **274 tests: 73 unit, 195 integration, 6 CLI E2E**
+(`007-supervisor-full-check.txt`). Diff whitespace checks passed.
+
+Supervised live proof on the isolated empty paused runtime:
+- A transient user unit with `RequiresMountsFor` completed two real supervisor cycles,
+  both `paused`, then reported `completed` with 2 cycles (2026-09-21 01:54:31 UTC,
+  exit 0, 2.634 seconds). Evidence: `007-supervisor-cycles-proof.json`.
+- SIGTERM after the first real cycle woke the supervisor and reported `stopped` with
+  exactly 1 cycle, exit 0 (01:55:02 UTC). Evidence: `007-supervisor-stop-proof.json`.
+- A separate mount-dependency capability probe exited 0. These do not prove interruption
+  of a live model turn or a reboot with the mount initially absent.
+
+Worker and independent metadata user-service templates are in `deploy/`; both passed
+`systemd-analyze --user verify`. They include mount requirements/condition, private
+umask, restart rate limits and initial resource caps. Neither was installed/enabled.
+`docs/service-operations.md` records execution, shutdown, mount, resource and recovery
+limits and explicitly pending production gates. The external UUID was reverified as
+`c6d768c3-187e-43b0-b14e-cb6c659d06f7`, ext4/rw. Pi memory snapshot: 3,981,369,344 bytes
+total, 2,023,108,608 available; swap 209,711,104 total with 65,536 free. Caps still need
+workload proof; RAM preflight, complete retention/upgrade procedures, actual dependency
+ordering/restart fault matrix and persistent-mount acceptance remain before Build 007
+completion. No primary Build 007 commit has been made.
+
+Memory preflight now requires 256 MiB of Linux `MemAvailable`, without treating swap
+as execution headroom. Three unit tests first failed on the absent implementation
+(`007-memory-red.txt`). Parsing rejects missing, malformed, duplicate or unreadable
+evidence with fixed redacted errors; reclaimable cache is correctly included. New
+implementation/review claims and explicit resumes check the reserve. Startup recovery
+can still observe/stop owned work when the resource gate denies continuation. The
+additional resource-pressure recovery test verifies that no continuation occurs and
+that the owned turn is reconciled. `doctor` reports available/minimum bytes.
+
+Full `npm run check` passed strict TypeScript and **278 tests: 76 unit, 196 integration,
+6 CLI E2E** (`007-resource-full-check.txt`). Live memory preflight passed on this Pi;
+its timestamp and available bytes are in `007-live-memory-preflight.json`.
+`docs/service-operations.md` now specifies conservative manual retention, capacity
+response, backup dependencies and ordered upgrade/rollback procedures. No automatic
+deletion, production mount change or service installation was performed.
+
+A `crash-recovery` mode is prepared in the existing implementation rehearsal script
+(optional argument after job seconds). It records a worker PID and accepted owned
+task/turn, SIGKILLs only that worker, waits for real lease expiry, invokes `recover-once`
+and asserts unchanged task/turn intents and original budget with a newer lease epoch.
+It retains evidence rather than retrying fixture creation. Syntax validation passed;
+this new mode has NOT run and is not live recovery evidence yet. Fixture #8 is still
+open with `codex-ready`; retire that authorization deliberately before creating the
+new rehearsal, preserving its PR and evidence. Build 007 remains in progress and
+uncommitted; live crash recovery and remaining dependency/mount gates are next.
+
+Live crash recovery passed at 2026-09-21 02:07:05 UTC. Before the new fixture, issue #8's
+`codex-ready` label was deliberately removed after confirming its ledger had no lease,
+active turn or pending operation. Its draft PR #9 and historical evidence are preserved.
+A subsequent `recheck-ready` observed withdrawal and changed that retired local job to
+`cancelled` (expected exit 1; `007-retired-fixture.json`). It is no longer a live ready
+fixture and must not be resumed as though authorization remains present.
+
+The new private fixture is issue #10 / draft PR #11:
+https://github.com/talaniz/prime-mover-fixture/pull/11
+Runtime: `/media/talaniz/postgresdata/codex-work/implementation-rehearsal-N1unsM`.
+Job: `db4bc0b4-17eb-4957-9006-2947ffde31a2`.
+The rehearsal reused the Build 004 greeting contract/helper with the new crash mode;
+the issue title retains that helper's Build 004 label, while this is Build 007 evidence.
+Worker PID 3508364 was SIGKILLed only after its accepted task/turn intents were durable.
+After the real lease expired, `recover-once` adopted epoch 2 from epoch 1 and completed
+verification, commit, normal push and draft PR publication. Exact before/after task/turn
+intents and original job budget matched; there was no replacement task or model turn.
+Owned task `01a0c1b6-4ccd-7543-a871-3cf1ec93df9e`, turn
+`01a0c1b6-4d91-75a3-9089-0e0ca7b94163`, final head
+`3b655d422a15d78ac66efc5196aa5edd84bcc45e`, base
+`eee4090de3540b66a25e2ee9195ada3bbec68f00`. Configured verification and independent
+fixture acceptance passed. The final stage is `pr-open`, no active lease/turn. Evidence:
+`007-live-crash-recovery.json` and its log. The rehearsal process exited 0 and is finished.
+Do not rerun this fixture-creation command. The new fixture remains authorized for
+subsequent complete-cycle acceptance; its reviews/readiness have not yet run.
+
+Supervised dependency ordering also passed: a transient worker requiring/ordered after
+a delayed socket-check gate started at monotonic microsecond 3563712378001, after gate
+exit 3563712254429, and executed a real paused cycle. Evidence:
+`007-service-ordering-proof.json`. A failed prerequisite prevented its dependent worker
+from executing (no marker was created). The initial assertion incorrectly expected a
+nonzero `systemd-run --wait` exit; this host returned zero despite the blocked job.
+The retained failure artifact is `007-service-failed-gate-proof.json`; authoritative
+journal records explicitly show `JOB_RESULT=dependency`, captured in
+`007-service-failed-gate-reconciled.json`. This is a proven dependency failure, not a
+successful worker start. All temporary Build 007 units are stopped/collected; a final
+unit listing was empty. Production services and shared app-server were not restarted.
+
+Remaining Build 007 closeout: validate resource caps with a representative workload,
+consolidate fault-boundary evidence and finish mount/operations acceptance documentation.
+Actual production persistent-mount installation and unattended activation remain owner-
+gated deployment work; no physical reboot or shared-daemon restart is claimed here.
+
+Resource-limit audit found a real host limitation. The transient full check passed
+278 tests (the pre-closeout test set) under the configured one-core CPU and 256-task
+limits in 3 min 2.643 sec, exit 0 (`007-capped-check.{json,txt}`). While active, systemd
+reported the requested memory settings but `MemoryCurrent=[not set]`; the kernel's
+cgroup controllers are `cpuset cpu io pids`, without memory. `/proc/cmdline` explicitly
+contains `cgroup_disable=memory`. Therefore this is NOT proof of enforced MemoryHigh/
+MemoryMax. The original receipt's limits field records requested settings only.
+
+A new resource test first failed on the absent controller guard
+(`007-memory-controller-red.txt`: 3 pass, 1 fail). Worker `service-preflight` now fails
+before unattended activation if the memory controller is absent; the metadata template
+also checks it. The live preflight returned expected exit 1 and the fixed actionable
+`memory-controller-unavailable` diagnostic (`007-live-service-preflight.txt`). Both
+service templates still pass `systemd-analyze --user verify`. Deployment must review the
+boot flag, schedule an owner-approved reboot, verify actual service cgroup memory.max
+values and repeat the workload. No boot file or host service was changed. Ordinary
+supervised cycle/doctor operations remain available; this gate is not bypassed by them.
+
+The proposed `deploy/fstab.example` preserves the UUID mount and nosuid/nodev/error
+options. Unprivileged verification found the device but could not read its filesystem
+signature; privileged read-only `findmnt --verify` confirmed ext4 with no errors or
+warnings (`007-fstab-{validation,privileged-validation}.txt`). The entry is NOT installed
+and no physical reboot is claimed. Persistent-mount and memory-controller activation
+remain part of the separately approved deployment window.
+
+Fault-boundary coverage was consolidated in `docs/recovery.md`. Three additional tests
+of existing command-evidence behavior passed: absent artifacts block without rerunning,
+matching artifacts acknowledge the same intent, and mismatched artifacts remain pending
+(`007-command-boundary-check.txt`). No artificial red was introduced for behavior already
+implemented. Three startup assertions first exposed generic blocker text
+(`007-blocker-reasons-red.txt`); recovery now distinguishes authorization, execution/
+transport/recovery budgets, resources and failed/interrupted turns using stable codes.
+Recovery attempt checks read the durable budget directly.
+
+Final checks for this increment: `npm run check` passed strict TypeScript and **282 tests:
+77 unit, 199 integration, 6 CLI E2E** (`007-closeout-check.txt`); `git diff --check` passed.
+Build 007 remains uncommitted while the final scope/entrypoint audit is completed. In
+particular, audit the standalone `poll` command against the recovery-before-intake
+contract; automatic `cycle` already gates intake through startup reconciliation.
+
+## Build 007 closeout
+
+The standalone intake entrypoint audit found and fixed the last recovery bypass:
+`poll` now refuses live or expired leases, active turns and pending operations/outbox
+before contacting GitHub. Three actual CLI tests first failed because GitHub was
+contacted (`007-poll-guard-red.txt`: 0 pass, 3 fail); they now pass. `cycle` continues to
+perform startup reconciliation before intake. Operator issue reconciliation remains
+explicit, and global execution claims still enforce the durable reservation invariant.
+
+Final primary-build validation: `npm run check` passed strict TypeScript and **285 tests:
+77 unit, 199 integration, 9 CLI E2E** (`007-final-check.txt`). Service templates pass
+systemd verification; the proposed fstab entry passed privileged read-only validation.
+Live worker-crash continuation, unchanged identity/deadline, verified draft publication,
+backup/paused restore, sequential supervision, shutdown and dependency ordering/failure
+have direct evidence in the entries above. The recovery matrix distinguishes live gates
+from injected faults. Diff whitespace checks passed.
+
+Build 007 implementation and supervised acceptance are complete. This primary build
+includes all recovery, storage/resource, backup, CLI/supervisor, service-template,
+operator-procedure and test changes together. No service is installed/enabled. Physical
+boot verification, persistent mount installation, removal of the existing memory-disable
+boot flag and proof of enforced memory limits remain owner-gated deployment prerequisites;
+the service preflight fails closed on the current host. These are not reported as passes.
+Build 008's complete MVA acceptance and linked DOOM Projects view remain pending, followed
+by independent milestone code/E2E reviews, release notes and final-head revalidation.

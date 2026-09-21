@@ -117,8 +117,8 @@ function fixture(t) {
     throw Error(`Unexpected RPC ${method}`);
   };
   const agents = [];
-  const agent = () => {
-    const a = new ExecutionAgent(store, rpc, () => now);
+  const agent = (options) => {
+    const a = new ExecutionAgent(store, rpc, () => now, options);
     agents.push(a);
     return a;
   };
@@ -540,5 +540,97 @@ test("E2E role starts with workflow-specific independent instructions and immuta
     f.store.operations(f.id).find((o) => o.key === "e2e-review-1:thread").input
       .role,
     "e2e-review",
+  );
+});
+
+test("restart reconciliation records a remotely accepted turn even after cancellation and interrupts only that turn", async (t) => {
+  const f = fixture(t),
+    a = f.agent();
+  f.loseTurn();
+  await assert.rejects(() => a.start(f.context, f.input), /uncertain/);
+  f.store.cancel(f.id, "stop during lost response");
+  const run = await a.reconcileRecorded(f.context, f.input.key);
+  assert.equal(run.turnId, "owned-turn");
+  assert.equal(f.store.job(f.id).activeTurnId, "owned-turn");
+  await a.observe(f.context, run);
+  assert.equal(await a.observe(f.context, run), "interrupted");
+  assert.equal(f.store.job(f.id).activeTurnId, null);
+  assert.equal(f.calls.filter((c) => c.method === "thread/start").length, 1);
+  assert.equal(f.calls.filter((c) => c.method === "turn/start").length, 1);
+  assert.equal(f.calls.filter((c) => c.method === "turn/interrupt").length, 1);
+});
+test("reconciliation never retries an uncertain turn send whose client identity is absent remotely", async (t) => {
+  const f = fixture(t),
+    a = f.agent(),
+    original = f.rpc.request;
+  let sends = 0;
+  f.rpc.request = async (method, params) => {
+    if (method === "turn/start") {
+      sends++;
+      throw Error("unknown send");
+    }
+    return original(method, params);
+  };
+  await assert.rejects(() => a.start(f.context, f.input), /uncertain/);
+  await assert.rejects(
+    () => a.reconcileRecorded(f.context, f.input.key),
+    /uncertain|reconcile/,
+  );
+  assert.equal(sends, 1);
+  assert.equal(
+    f.store.operations(f.id).find((o) => o.key === f.input.key + ":turn")
+      .status,
+    "pending",
+  );
+});
+test("a lost empty-task response can be correlated without starting a replacement task or any turn", async (t) => {
+  const f = fixture(t),
+    a = f.agent();
+  f.loseThread();
+  await assert.rejects(() => a.start(f.context, f.input), /uncertain/);
+  assert.equal(await a.reconcileRecorded(f.context, f.input.key), null);
+  assert.equal(
+    f.store.operations(f.id).find((o) => o.key === f.input.key + ":thread")
+      .result.threadId,
+    "owned-task",
+  );
+  assert.equal(f.calls.filter((c) => c.method === "thread/start").length, 1);
+  assert.equal(f.calls.filter((c) => c.method === "turn/start").length, 0);
+});
+
+test("transport failure allowance survives reopening the ledger and never prevents an owned stop", async (t) => {
+  const f = fixture(t),
+    a = f.agent({ transportAttempts: 2 });
+  const run = await a.start(f.context, f.input);
+  const request = f.rpc.request;
+  let reads = 0;
+  f.rpc.request = async (method, params) => {
+    if (method === "thread/read") {
+      reads++;
+      throw Error("private transport detail");
+    }
+    return request(method, params);
+  };
+  await assert.rejects(a.observe(f.context, run), /transport-budget-exhausted/);
+  assert.equal(reads, 2);
+  f.restart();
+  const resumed = f.agent({ transportAttempts: 2 });
+  await assert.rejects(
+    resumed.observe(f.context, run),
+    /transport-budget-exhausted/,
+  );
+  assert.equal(reads, 2, "restart must not grant more transport attempts");
+  await assert.rejects(
+    resumed.start(f.context, { ...f.input, key: "replacement" }),
+    /transport-budget-exhausted/,
+  );
+  f.rpc.request = request;
+  f.abort();
+  await resumed.observe(f.context, run);
+  await resumed.observe(f.context, run);
+  assert.equal(f.store.job(f.id).activeTurnId, null);
+  assert.doesNotMatch(
+    JSON.stringify(f.store.events(f.id)),
+    /private transport detail/,
   );
 });

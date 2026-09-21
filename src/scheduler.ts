@@ -10,6 +10,7 @@ export class Scheduler {
     private readonly store: Store,
     private readonly owner: string,
     private readonly leaseMs = 30000,
+    private readonly shutdown?: AbortSignal,
   ) {
     if (!Number.isSafeInteger(leaseMs) || leaseMs < 30)
       throw new Error("Lease must be at least 30 milliseconds");
@@ -17,6 +18,7 @@ export class Scheduler {
   async runOnce(
     handler: (context: WorkContext) => Promise<void>,
   ): Promise<string> {
+    if (this.shutdown?.aborted) return "stopped";
     const lease = this.store.claim(this.owner, this.leaseMs);
     if (!lease) return "idle";
     return this.runClaimed(lease, handler);
@@ -24,14 +26,27 @@ export class Scheduler {
   async runClaimed(
     lease: Lease,
     handler: (context: WorkContext) => Promise<void>,
+    options: { reconciliation?: boolean } = {},
   ): Promise<string> {
-    this.store.assertWorker(lease);
+    if (options.reconciliation) this.store.assertRecoveryLease(lease);
+    else this.store.assertWorker(lease);
     const abort = new AbortController();
+    const signal = this.shutdown
+      ? AbortSignal.any([abort.signal, this.shutdown])
+      : abort.signal;
+    const checkAuthorization = () => {
+      try {
+        this.store.assertWorker(lease);
+      } catch {
+        abort.abort();
+      }
+    };
+    checkAuthorization();
     const context: WorkContext = {
       lease,
-      signal: abort.signal,
+      signal,
       assertActive: () => {
-        if (abort.signal.aborted)
+        if (signal.aborted)
           throw new Error("Lease lost or cancellation requested");
         this.store.assertWorker(lease);
       },
@@ -39,7 +54,12 @@ export class Scheduler {
     const timer = setInterval(
       () => {
         try {
-          this.store.assertWorker(lease);
+          if (options.reconciliation) {
+            // Stopping a cancelled turn may take longer than a lease. Retain
+            // observation ownership without permitting new worker side effects.
+            this.store.assertRecoveryLease(lease);
+            checkAuthorization();
+          } else this.store.assertWorker(lease);
           this.store.heartbeat(lease, this.leaseMs);
         } catch {
           abort.abort();

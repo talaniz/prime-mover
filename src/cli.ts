@@ -1,3 +1,6 @@
+import path from "node:path";
+import { checkResources, requireMemoryController } from "./resources.js";
+import { workerCycle } from "./worker-cycle.js";
 import { readinessEvidence } from "./readiness.js";
 import type { WorkspacePlan } from "./worktree.js";
 import { ReviewCoordinator } from "./review-coordinator.js";
@@ -8,21 +11,25 @@ import { Implementation } from "./implementation.js";
 import { Worktrees } from "./worktree.js";
 import { ExecutionAgent } from "./execution-agent.js";
 import { Publication, GitHubPulls } from "./publication.js";
-import { Scheduler } from "./scheduler.js";
-import { readFile, lstat, chmod } from "node:fs/promises";
+import { Scheduler, type WorkContext } from "./scheduler.js";
+import { StartupRecovery, recoveryRoute } from "./startup-recovery.js";
+import { readFile, lstat, chmod, mkdir } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
-import { validateConfig, PROTOCOL_VERSION } from "./config.js";
-import { checkStorage, openRuntime } from "./storage.js";
+import { validateConfig, PROTOCOL_VERSION, isWithin } from "./config.js";
+import { checkStorage, openRuntime, safeDescendant } from "./storage.js";
 import { metadataServer, metadataSnapshot } from "./metadata.js";
 import { Intake } from "./intake.js";
 import { GitHubClient } from "./github.js";
 import { AppServer } from "./app-server.js";
-import type { Job, Store } from "./store.js";
+import { Store, type Job } from "./store.js";
 
 const [command, configPath, ...args] = process.argv.slice(2);
 const commands = [
   "config-check",
   "doctor",
+  "service-preflight",
+  "backup",
+  "restore-check",
   "status",
   "inspect",
   "pause",
@@ -32,6 +39,8 @@ const commands = [
   "metadata",
   "poll",
   "run-once",
+  "recover-once",
+  "cycle",
   "code-review",
   "e2e-review",
   "recheck-ready",
@@ -97,8 +106,59 @@ if (!command || !commands.includes(command) || !configPath) {
         projects: config.projects.map((p) => p.id),
         executionStarted: false,
       });
-    } else if (command === "doctor") {
+    } else if (command === "backup" || command === "restore-check") {
+      if (args.length !== (command === "backup" ? 1 : 2))
+        throw new Error(
+          "Backup requires OUTPUT_FILE; restore-check requires BACKUP_FILE ISOLATED_OUTPUT_FILE",
+        );
       checkStorage(config);
+      const scoped = (filename: string, directory: "backups" | "restores") => {
+        if (
+          !path.isAbsolute(filename) ||
+          path.normalize(filename) !== filename ||
+          !isWithin(path.join(config.storage.root, directory), filename)
+        )
+          throw new Error(
+            `Use a new file inside the runtime ${directory} directory`,
+          );
+        safeDescendant(config.storage.mount, filename);
+        return filename;
+      };
+      const source = scoped(args[0]!, "backups");
+      const destination =
+        command === "backup" ? source : scoped(args[1]!, "restores");
+      await mkdir(path.dirname(destination), { recursive: true, mode: 0o700 });
+      checkStorage(config);
+      safeDescendant(config.storage.mount, destination);
+      if (command === "backup") {
+        store = openRuntime(config);
+
+        output({
+          backup: destination,
+          ...(await store.backupTo(destination)),
+          executionStarted: false,
+        });
+      } else {
+        const receipt = await Store.restoreBackup(source, destination);
+        const restored = new Store(destination);
+        try {
+          restored.setPaused(true);
+        } finally {
+          restored.close();
+        }
+        output({
+          restored: destination,
+          sourceSha256: receipt.sha256,
+          schemaVersion: receipt.schemaVersion,
+          jobs: receipt.jobs,
+          paused: true,
+          executionStarted: false,
+        });
+      }
+    } else if (["doctor", "service-preflight"].includes(command)) {
+      checkStorage(config);
+      if (command === "service-preflight") requireMemoryController();
+      const resources = checkResources();
       if (
         config.appServer.version !== PROTOCOL_VERSION ||
         execFileSync("codex", ["--version"], {
@@ -128,12 +188,50 @@ if (!command || !commands.includes(command) || !configPath) {
       output({
         ok: true,
         storage: "verified",
+        resources,
         credentials: "available",
         protocol: PROTOCOL_VERSION,
         executionStarted: false,
       });
     } else {
       store = openRuntime(config);
+      const recheckReady = async (id: string) => {
+        const job = store!.job(id);
+        if (!job || job.stage !== "ready") throw new Error("Job is not ready");
+        try {
+          const intake = new Intake(store!, new GitHubClient());
+          await intake.authorize(id);
+          const project = store!
+            .projects()
+            .find((p) => p.id === job.projectId)!;
+          const plan = store!
+            .operations(id)
+            .find((o) => o.key === "workspace-plan")!.result as WorkspacePlan;
+          const pulls = new GitHubPulls(),
+            inputs = new ReviewInputs(
+              new Worktrees(config.storage.root, undefined, config.gitAuthor),
+              pulls,
+            );
+          const input = await inputs.collect(plan, project, job.prNumber!);
+          readinessEvidence(
+            store!,
+            id,
+            await pulls.readiness(
+              project.repository,
+              job.prNumber!,
+              project.baseBranch,
+              input.target,
+            ),
+            Date.now(),
+            true,
+          );
+          return { result: "ready", head: input.target.head };
+        } catch {
+          if (store!.job(id)?.stage === "ready")
+            store!.revokeReadiness(id, "readiness-check-failed");
+          return { result: store!.job(id)?.stage ?? "blocked" };
+        }
+      };
       if (command === "status")
         output(metadataSnapshot(store, config.metadata.freshnessSeconds));
       else if (command === "inspect")
@@ -152,44 +250,14 @@ if (!command || !commands.includes(command) || !configPath) {
       } else if (command === "recheck-ready") {
         if (args.length !== 1)
           throw new Error("Exactly one ready job ID is required");
-        const id = args[0]!,
-          job = store.job(id);
-        if (!job || job.stage !== "ready") throw new Error("Job is not ready");
-        try {
-          const intake = new Intake(store, new GitHubClient());
-          await intake.authorize(id);
-          const project = store.projects().find((p) => p.id === job.projectId)!;
-          const plan = store
-            .operations(id)
-            .find((o) => o.key === "workspace-plan")!.result as WorkspacePlan;
-          const pulls = new GitHubPulls(),
-            inputs = new ReviewInputs(
-              new Worktrees(config.storage.root, undefined, config.gitAuthor),
-              pulls,
-            );
-          const input = await inputs.collect(plan, project, job.prNumber!);
-          readinessEvidence(
-            store,
-            id,
-            await pulls.readiness(
-              project.repository,
-              job.prNumber!,
-              project.baseBranch,
-              input.target,
-            ),
-            Date.now(),
-            true,
-          );
-          output({ result: "ready", head: input.target.head });
-        } catch {
-          if (store.job(id)?.stage === "ready")
-            store.revokeReadiness(id, "readiness-check-failed");
-          output({ result: store.job(id)?.stage ?? "blocked" });
-          process.exitCode = 1;
-        }
+        const checked = await recheckReady(args[0]!);
+        output(checked);
+        if (checked.result !== "ready") process.exitCode = 1;
       } else if (
         [
           "run-once",
+          "recover-once",
+          "cycle",
           "resume-publication",
           "code-review",
           "e2e-review",
@@ -207,7 +275,10 @@ if (!command || !commands.includes(command) || !configPath) {
           args.length !== 1
         )
           throw new Error("Exactly one job ID is required for code review");
-        if (command === "run-once" && args.length)
+        if (
+          ["run-once", "recover-once", "cycle"].includes(command) &&
+          args.length
+        )
           throw new Error("Unexpected command arguments");
         if (command === "resume-publication" && args.length < 2)
           throw new Error("Job ID and explicit reason are required");
@@ -221,11 +292,17 @@ if (!command || !commands.includes(command) || !configPath) {
           throw new Error(
             "Unsupported app-server protocol version; repeat compatibility acceptance",
           );
+        const shutdown = new AbortController();
+        const stop = () => shutdown.abort();
+        process.once("SIGTERM", stop);
+        process.once("SIGINT", stop);
         const app = new AppServer(config.appServer.socket, 30000);
         let agent: ExecutionAgent | undefined;
         try {
           await app.connect();
-          agent = new ExecutionAgent(store, app);
+          agent = new ExecutionAgent(store, app, Date.now, {
+            transportAttempts: config.limits.transportAttempts,
+          });
           const github = new GitHubClient();
           const intake = new Intake(store, github, {
             pollMs: config.pollSeconds * 1000,
@@ -255,13 +332,89 @@ if (!command || !commands.includes(command) || !configPath) {
             publication,
           );
           const owner = `worker-${randomUUID()}`;
-          const scheduler = new Scheduler(store, owner);
+          const scheduler = new Scheduler(store, owner, 30000, shutdown.signal);
+          const runReview = async (context: WorkContext, e2e: boolean) => {
+            const id = context.lease.jobId;
+            const inputs = new ReviewInputs(trees, pulls),
+              comments = new PrComments(store!, github, (id) =>
+                intake.authorize(id),
+              );
+            const review = new ReviewCoordinator(
+              store!,
+              config,
+              { agent: agent!, inputs, comments, publication, intake },
+              { role: e2e ? "e2e-review" : "code-review" },
+            );
+            await review.run(context);
+            if (e2e) {
+              const job = store!.job(id)!,
+                project = store!
+                  .projects()
+                  .find((p) => p.id === job.projectId)!;
+              const plan = store!
+                .operations(id)
+                .find((o) => o.key === "workspace-plan")!
+                .result as WorkspacePlan;
+              const refresh = async () => {
+                context.assertActive();
+                await intake.authorize(id);
+                const input = await inputs.collect(
+                  plan,
+                  project,
+                  job.prNumber!,
+                );
+                const remote = await pulls.readiness(
+                  project.repository,
+                  job.prNumber!,
+                  project.baseBranch,
+                  input.target,
+                );
+                context.assertActive();
+                return remote;
+              };
+              try {
+                await comments.ready(context, await refresh());
+                store!.finishReady(context.lease, await refresh());
+              } catch (error) {
+                store!.blockAndRelease(context.lease, "readiness-check-failed");
+                throw error;
+              }
+            }
+          };
+          const recover = () =>
+            new StartupRecovery(
+              store!,
+              {
+                jobSeconds: config.limits.jobSeconds,
+                recoveryAttempts: config.limits.transportAttempts,
+                signal: shutdown.signal,
+                canContinue: () => {
+                  checkResources();
+                },
+              },
+              agent!,
+              intake,
+            ).run(async (context) => {
+              const id = context.lease.jobId;
+              const route = recoveryRoute(
+                store!.job(id)!,
+                store!.operations(id),
+              );
+              store!.resumeRecovery(
+                context.lease,
+                route.stage,
+                config.limits.transportAttempts,
+              );
+              if (route.role === "implementation") await worker.run(context);
+              else await runReview(context, route.role === "e2e-review");
+            });
           let result: string;
           if (
             ["code-review", "resume-code-review", "e2e-review"].includes(
               command,
             )
           ) {
+            checkResources();
             const e2e = command === "e2e-review";
             const id = args[0]!;
             let lease;
@@ -294,57 +447,11 @@ if (!command || !commands.includes(command) || !configPath) {
                 ? store.claimE2EReview(id, owner, 30000)
                 : store.claimCodeReview(id, owner, 30000);
             }
-            const inputs = new ReviewInputs(trees, pulls),
-              comments = new PrComments(store, github, (id) =>
-                intake.authorize(id),
-              );
-            const review = new ReviewCoordinator(
-              store,
-              config,
-              { agent, inputs, comments, publication, intake },
-              { role: e2e ? "e2e-review" : "code-review" },
+            result = await scheduler.runClaimed(lease, (context) =>
+              runReview(context, e2e),
             );
-            result = await scheduler.runClaimed(lease, async (context) => {
-              await review.run(context);
-              if (e2e) {
-                const job = store!.job(id)!,
-                  project = store!
-                    .projects()
-                    .find((p) => p.id === job.projectId)!;
-                const plan = store!
-                  .operations(id)
-                  .find((o) => o.key === "workspace-plan")!
-                  .result as WorkspacePlan;
-                const refresh = async () => {
-                  context.assertActive();
-                  await intake.authorize(id);
-                  const input = await inputs.collect(
-                    plan,
-                    project,
-                    job.prNumber!,
-                  );
-                  const remote = await pulls.readiness(
-                    project.repository,
-                    job.prNumber!,
-                    project.baseBranch,
-                    input.target,
-                  );
-                  context.assertActive();
-                  return remote;
-                };
-                try {
-                  await comments.ready(context, await refresh());
-                  store!.finishReady(context.lease, await refresh());
-                } catch (error) {
-                  store!.blockAndRelease(
-                    context.lease,
-                    "readiness-check-failed",
-                  );
-                  throw error;
-                }
-              }
-            });
           } else if (command === "resume-publication") {
+            checkResources();
             const id = args[0]!;
             const proof = await agent.proveCompleted(id);
             await intake.authorize(id, { allowOperationalBlock: true });
@@ -358,12 +465,64 @@ if (!command || !commands.includes(command) || !configPath) {
             result = await scheduler.runClaimed(lease, (context) =>
               worker.run(context),
             );
-          } else
-            result = await scheduler.runOnce((context) => worker.run(context));
+          } else if (command === "cycle") {
+            result = await workerCycle(store, {
+              preflight: async () => {
+                shutdown.signal.throwIfAborted();
+                checkStorage(config);
+              },
+              recover,
+              recheck: async (id) => {
+                await recheckReady(id);
+              },
+              poll: () => {
+                shutdown.signal.throwIfAborted();
+                return intake.poll();
+              },
+              review: async (id, role) => {
+                await intake.authorize(id);
+                shutdown.signal.throwIfAborted();
+                checkResources();
+                const lease =
+                  role === "code-review"
+                    ? store!.claimCodeReview(id, owner, 30000)
+                    : store!.claimE2EReview(id, owner, 30000);
+                return scheduler.runClaimed(lease, (context) =>
+                  runReview(context, role === "e2e-review"),
+                );
+              },
+              implement: () => {
+                checkResources();
+                return scheduler.runOnce((context) => worker.run(context));
+              },
+            });
+          } else {
+            result = await recover();
+            if (command === "run-once" && result === "clear") {
+              checkResources();
+              result = await scheduler.runOnce((context) =>
+                worker.run(context),
+              );
+            }
+          }
           output({ result });
-          if (!["idle", "pr-open", "e2e-review", "ready"].includes(result))
+          if (
+            ![
+              "idle",
+              "paused",
+              "stopped",
+              "clear",
+              "busy",
+              "cancelled",
+              "pr-open",
+              "e2e-review",
+              "ready",
+            ].includes(result)
+          )
             process.exitCode = 1;
         } finally {
+          process.removeListener("SIGTERM", stop);
+          process.removeListener("SIGINT", stop);
           agent?.close();
           app.close();
         }
@@ -383,6 +542,10 @@ if (!command || !commands.includes(command) || !configPath) {
         try {
           if (command === "poll") {
             if (args.length) throw new Error("Unexpected command arguments");
+            if (store.hasExecutionReservation())
+              throw new Error(
+                "Execution ownership requires recovery before intake; use recover-once or cycle",
+              );
             await intake.poll();
             output(metadataSnapshot(store, config.metadata.freshnessSeconds));
           } else {

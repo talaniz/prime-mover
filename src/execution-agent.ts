@@ -87,21 +87,50 @@ export class ExecutionAgent {
     private readonly store: Store,
     private readonly rpc: AgentRpc,
     private readonly now: () => number = Date.now,
+    private readonly options: { transportAttempts?: number } = {},
   ) {
+    if (
+      !Number.isSafeInteger(options.transportAttempts ?? 3) ||
+      (options.transportAttempts ?? 3) < 1
+    )
+      throw new Error("Invalid transport attempt limit");
     rpc.on("notification", this.notification);
   }
   close(): void {
     this.rpc.off("notification", this.notification);
   }
+  private assertTransportBudget(context: WorkContext): void {
+    if (
+      this.store.budgetUsed(context.lease.jobId, "transport-failures") >=
+      (this.options.transportAttempts ?? 3)
+    )
+      throw new ExecutionBlocked("transport-budget-exhausted");
+  }
   private async read(
     method: "thread/read" | "thread/list" | "thread/turns/list",
     params: unknown,
+    context?: WorkContext,
   ): Promise<unknown> {
-    for (let attempt = 0; attempt < 3; attempt++) {
+    const limit = this.options.transportAttempts ?? 3;
+    for (let attempt = 0; attempt < limit; attempt++) {
+      const stopping =
+        context &&
+        (context.signal.aborted ||
+          this.store.job(context.lease.jobId)?.cancelRequested);
+      if (context && !stopping) this.assertTransportBudget(context);
       try {
         return await this.rpc.request(method, params);
       } catch {
-        if (attempt === 2)
+        if (context && !stopping) {
+          const used = this.store.consumeBudget(
+            context.lease,
+            "transport-failures",
+            limit,
+          );
+          if (used >= limit)
+            throw new ExecutionBlocked("transport-budget-exhausted");
+        }
+        if (attempt === limit - 1)
           throw new ExecutionBlocked("agent-observation-unavailable");
         await new Promise((resolve) =>
           setTimeout(resolve, 100 * (attempt + 1)),
@@ -113,16 +142,21 @@ export class ExecutionAgent {
   private async pages(
     method: "thread/list" | "thread/turns/list",
     params: RecordValue,
+    context?: WorkContext,
   ): Promise<RecordValue[]> {
     const results: RecordValue[] = [];
     const seen = new Set<string>();
     let cursor: string | undefined;
     for (let count = 0; count < 100; count++) {
       const result = object(
-        await this.read(method, {
-          ...params,
-          ...(cursor ? { cursor } : {}),
-        }),
+        await this.read(
+          method,
+          {
+            ...params,
+            ...(cursor ? { cursor } : {}),
+          },
+          context,
+        ),
       );
       if (!Array.isArray(result.data))
         throw new ExecutionBlocked("invalid-agent-history");
@@ -205,6 +239,7 @@ export class ExecutionAgent {
     },
   ): Promise<AgentRun> {
     context.assertActive();
+    this.assertTransportBudget(context);
     if (
       !/^[a-z0-9-]+$/.test(input.key) ||
       !input.cwd.startsWith("/") ||
@@ -259,22 +294,26 @@ export class ExecutionAgent {
       threadId = text(object(threadOp.result).threadId);
     else if (previous) {
       const candidates = (
-        await this.pages("thread/list", {
-          cwd: input.cwd,
-          limit: 100,
-          sourceKinds: [
-            "cli",
-            "vscode",
-            "exec",
-            "appServer",
-            "subAgent",
-            "subAgentReview",
-            "subAgentCompact",
-            "subAgentThreadSpawn",
-            "subAgentOther",
-            "unknown",
-          ],
-        })
+        await this.pages(
+          "thread/list",
+          {
+            cwd: input.cwd,
+            limit: 100,
+            sourceKinds: [
+              "cli",
+              "vscode",
+              "exec",
+              "appServer",
+              "subAgent",
+              "subAgentReview",
+              "subAgentCompact",
+              "subAgentThreadSpawn",
+              "subAgentOther",
+              "unknown",
+            ],
+          },
+          context,
+        )
       ).filter((t) => t.cwd === input.cwd && t.threadSource === source);
       if (candidates.length !== 1)
         throw new ExecutionBlocked("task-start-uncertain-reconcile");
@@ -360,11 +399,15 @@ export class ExecutionAgent {
     if (turnOp.status === "done") turnId = text(object(turnOp.result).turnId);
     else if (oldTurn) {
       const matches = (
-        await this.pages("thread/turns/list", {
-          threadId,
-          limit: 100,
-          itemsView: "full",
-        })
+        await this.pages(
+          "thread/turns/list",
+          {
+            threadId,
+            limit: 100,
+            itemsView: "full",
+          },
+          context,
+        )
       ).filter(
         (t) =>
           Array.isArray(t.items) &&
@@ -407,6 +450,128 @@ export class ExecutionAgent {
       source,
       deadline,
     };
+  }
+  /** Reconcile persisted identities only; never sends thread/start or turn/start. */
+  async reconcileRecorded(
+    context: WorkContext,
+    key: string,
+  ): Promise<AgentRun | null> {
+    const job = this.store.job(context.lease.jobId);
+    if (
+      !job ||
+      job.leaseOwner !== context.lease.owner ||
+      job.leaseEpoch !== context.lease.epoch ||
+      job.leaseUntil === null ||
+      job.leaseUntil <= this.now()
+    )
+      throw new ExecutionBlocked("lease-lost");
+    if (!/^[a-z0-9-]+$/.test(key))
+      throw new ExecutionBlocked("invalid-agent-contract");
+    const operations = this.store.operations(job.id),
+      task = operations.find((o) => o.key === `${key}:thread`),
+      turn = operations.find((o) => o.key === `${key}:turn`);
+    if (!task) {
+      if (turn || job.activeTurnId)
+        throw new ExecutionBlocked("recorded-task-missing-reconcile");
+      return null;
+    }
+    if (task.kind !== "thread-start" || (turn && turn.kind !== "turn-start"))
+      throw new ExecutionBlocked("invalid-agent-contract");
+    const input = object(task.input),
+      cwd = text(input.cwd),
+      source = text(input.source);
+    let threadId: string;
+    if (task.status === "done") threadId = text(object(task.result).threadId);
+    else {
+      const candidates = (
+        await this.pages(
+          "thread/list",
+          {
+            cwd,
+            limit: 100,
+            sourceKinds: [
+              "cli",
+              "vscode",
+              "exec",
+              "appServer",
+              "subAgent",
+              "subAgentReview",
+              "subAgentCompact",
+              "subAgentThreadSpawn",
+              "subAgentOther",
+              "unknown",
+            ],
+          },
+          context,
+        )
+      ).filter((t) => t.cwd === cwd && t.threadSource === source);
+      if (candidates.length !== 1)
+        throw new ExecutionBlocked("task-start-uncertain-reconcile");
+      threadId = text(candidates[0]!.id);
+    }
+    let thread = object(
+      object(
+        await this.read(
+          "thread/read",
+          { threadId, includeTurns: false },
+          context,
+        ),
+      ).thread,
+    );
+    this.owned(thread, cwd, source, threadId);
+    if (object(thread.status).type === "notLoaded")
+      thread = this.policy(
+        object(
+          await this.rpc.request("thread/resume", {
+            threadId,
+            ...threadOptions(cwd),
+            runtimeWorkspaceRoots: [cwd],
+            excludeTurns: true,
+          }),
+        ),
+        cwd,
+        source,
+        threadId,
+      );
+    const turns = await this.pages(
+      "thread/turns/list",
+      {
+        threadId,
+        limit: 100,
+        itemsView: "full",
+      },
+      context,
+    );
+    if (!turn) {
+      if (turns.length || classifyThread(thread) !== "idle" || job.activeTurnId)
+        throw new ExecutionBlocked("unrecorded-turn-requires-reconciliation");
+      this.store.completeOperation(context.lease, task.key, { threadId });
+      return null;
+    }
+    const turnInput = object(turn.input),
+      clientId = text(turnInput.clientId),
+      deadline = Number(turnInput.deadline);
+    if (turnInput.threadId !== threadId || !Number.isSafeInteger(deadline))
+      throw new ExecutionBlocked("agent-turn-contract-mismatch");
+    const matches = turns.filter(
+      (t) =>
+        Array.isArray(t.items) &&
+        t.items.some((i) => {
+          const item = object(i);
+          return item.type === "userMessage" && item.clientId === clientId;
+        }),
+    );
+    if (matches.length !== 1)
+      throw new ExecutionBlocked("turn-start-uncertain-reconcile");
+    const turnId = text(matches[0]!.id);
+    if (turn.status === "done" && object(turn.result).turnId !== turnId)
+      throw new ExecutionBlocked("agent-run-identity-mismatch");
+    if (turns.some((t) => t.id !== turnId && t.status === "inProgress"))
+      throw new ExecutionBlocked("unrecorded-turn-requires-reconciliation");
+    this.store.completeOperation(context.lease, task.key, { threadId });
+    this.store.recordObservedTurn(context.lease, threadId, turnId);
+    this.store.completeOperation(context.lease, turn.key, { turnId });
+    return { key, cwd, source, threadId, turnId, clientId, deadline };
   }
   /** Read-only proof before an operator reclaims publication; never starts a turn. */
   async proveCompleted(
@@ -461,11 +626,15 @@ export class ExecutionAgent {
   async result(context: WorkContext, run: AgentRun): Promise<string> {
     if ((await this.observe(context, run)) !== "completed")
       throw new ExecutionBlocked("agent-result-not-completed");
-    const turns = await this.pages("thread/turns/list", {
-      threadId: run.threadId,
-      limit: 100,
-      itemsView: "full",
-    });
+    const turns = await this.pages(
+      "thread/turns/list",
+      {
+        threadId: run.threadId,
+        limit: 100,
+        itemsView: "full",
+      },
+      context,
+    );
     const turn = turns.find((t) => t.id === run.turnId);
     if (turn?.status !== "completed" || !Array.isArray(turn.items))
       throw new ExecutionBlocked("agent-result-missing");
@@ -511,10 +680,14 @@ export class ExecutionAgent {
       throw new ExecutionBlocked("agent-run-identity-mismatch");
     let thread = object(
       object(
-        await this.read("thread/read", {
-          threadId: run.threadId,
-          includeTurns: false,
-        }),
+        await this.read(
+          "thread/read",
+          {
+            threadId: run.threadId,
+            includeTurns: false,
+          },
+          context,
+        ),
       ).thread,
     );
     this.owned(thread, run.cwd, run.source, run.threadId);
@@ -533,11 +706,15 @@ export class ExecutionAgent {
         run.threadId,
       );
     const state = classifyThread(thread);
-    const turns = await this.pages("thread/turns/list", {
-      threadId: run.threadId,
-      limit: 100,
-      itemsView: "full",
-    });
+    const turns = await this.pages(
+      "thread/turns/list",
+      {
+        threadId: run.threadId,
+        limit: 100,
+        itemsView: "full",
+      },
+      context,
+    );
     const turn = turns.find((t) => t.id === run.turnId);
     if (!turn) throw new ExecutionBlocked("recorded-turn-missing-reconcile");
     if (["completed", "failed", "interrupted"].includes(String(turn.status))) {

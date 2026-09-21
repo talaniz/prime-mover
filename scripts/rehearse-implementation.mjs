@@ -2,13 +2,16 @@
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync, existsSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawnSync, spawn } from "node:child_process";
 import { validateConfig } from "../dist/config.js";
 import { checkStorage, openRuntime } from "../dist/storage.js";
 import { ghTransport, GitHubClient } from "../dist/github.js";
 import { runIsolated } from "../dist/verification.js";
 import { git } from "../dist/worktree.js";
-const [mount, uuid, evidencePath, jobSeconds = "900"] = process.argv.slice(2);
+const [mount, uuid, evidencePath, jobSeconds = "900", recoveryMode] =
+  process.argv.slice(2);
+if (recoveryMode !== undefined && recoveryMode !== "crash-recovery")
+  throw Error("Unknown rehearsal mode");
 if (
   !Number.isSafeInteger(Number(jobSeconds)) ||
   Number(jobSeconds) < 900 ||
@@ -162,7 +165,99 @@ console.log(
     root,
   }),
 );
-const result = command("run-once");
+let result;
+if (recoveryMode === "crash-recovery") {
+  evidence.phase = "worker-start-intent";
+  save();
+  const child = spawn(
+    process.execPath,
+    ["dist/cli.js", "run-once", configPath],
+    { stdio: ["ignore", "ignore", "ignore"] },
+  );
+  const exited = new Promise((resolve) => {
+    child.once("error", () => resolve({ code: null, signal: "spawn-error" }));
+    child.once("exit", (code, signal) => resolve({ code, signal }));
+  });
+  evidence.workerPid = child.pid;
+  save();
+  const until = Date.now() + 120000;
+  let interrupted;
+  while (Date.now() < until) {
+    const current = state((s) => s.job(job.id));
+    const accepted = state((s) =>
+      s
+        .operations(job.id)
+        .filter((o) => ["thread-start", "turn-start"].includes(o.kind)),
+    );
+    if (
+      current.activeTurnId &&
+      accepted.length === 2 &&
+      accepted.every((o) => o.status === "done")
+    ) {
+      interrupted = current;
+      break;
+    }
+    if (child.exitCode !== null || child.signalCode !== null) break;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert.ok(
+    interrupted,
+    "No owned turn observed; inspect the recorded worker, never launch another blindly",
+  );
+  evidence.recoveryBefore = state((s) => ({
+    job: s.job(job.id),
+    budget: s.operations(job.id).find((o) => o.key === "implementation-budget"),
+    taskIntents: s
+      .operations(job.id)
+      .filter((o) => ["thread-start", "turn-start"].includes(o.kind)),
+  }));
+  evidence.phase = "worker-kill-intent";
+  save();
+  assert.equal(child.kill("SIGKILL"), true);
+  evidence.workerExit = await exited;
+  assert.equal(evidence.workerExit.signal, "SIGKILL");
+  evidence.phase = "worker-killed-awaiting-lease-expiry";
+  save();
+  console.log(
+    JSON.stringify({
+      phase: evidence.phase,
+      jobId: job.id,
+      threadId: interrupted.activeThreadId,
+      turnId: interrupted.activeTurnId,
+    }),
+  );
+  while (Date.now() <= interrupted.leaseUntil)
+    await new Promise((resolve) =>
+      setTimeout(
+        resolve,
+        Math.min(1000, interrupted.leaseUntil - Date.now() + 10),
+      ),
+    );
+  evidence.phase = "recovering-original-worker";
+  save();
+  result = command("recover-once");
+  evidence.recoveryAfter = state((s) => ({
+    job: s.job(job.id),
+    budget: s.operations(job.id).find((o) => o.key === "implementation-budget"),
+    taskIntents: s
+      .operations(job.id)
+      .filter((o) => ["thread-start", "turn-start"].includes(o.kind)),
+  }));
+  assert.deepEqual(
+    evidence.recoveryAfter.budget,
+    evidence.recoveryBefore.budget,
+  );
+  assert.deepEqual(
+    evidence.recoveryAfter.taskIntents,
+    evidence.recoveryBefore.taskIntents,
+  );
+  assert.equal(
+    evidence.recoveryAfter.job.activeThreadId,
+    interrupted.activeThreadId,
+  );
+  assert.ok(evidence.recoveryAfter.job.leaseEpoch > interrupted.leaseEpoch);
+  save();
+} else result = command("run-once");
 assert.equal(result.result, "pr-open");
 const completed = state((s) => s.job(job.id));
 assert.equal(completed.stage, "pr-open");

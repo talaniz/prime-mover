@@ -7,6 +7,7 @@ import {
   mkdirSync,
   realpathSync,
   statSync,
+  statfsSync,
 } from "node:fs";
 import path from "node:path";
 import type { Config } from "./config.js";
@@ -29,26 +30,42 @@ export function safeDescendant(mount: string, destination: string): void {
       throw new Error("Storage device changed below mount");
   }
 }
-/** Read-only preflight: never creates a missing mount or root directory. */
-export function checkStorage(config: Config): void {
-  try {
-    const mount = config.storage.mount;
-    if (realpathSync(mount) !== mount) throw new Error("noncanonical mount");
+export interface StorageProbe {
+  mount(
+    path: string,
+  ):
+    | { target: string; uuid: string; fstype: string; options: string }
+    | undefined;
+  space(path: string): { availableBytes: number; availableInodes: number };
+}
+const nativeProbe: StorageProbe = {
+  mount(mount) {
     const data = JSON.parse(
       execFileSync(
         "findmnt",
         ["-J", "-T", mount, "-o", "TARGET,UUID,FSTYPE,OPTIONS"],
         { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
       ),
-    ) as {
-      filesystems?: {
-        target: string;
-        uuid: string;
-        fstype: string;
-        options: string;
-      }[];
+    ) as { filesystems?: ReturnType<StorageProbe["mount"]>[] };
+    return data.filesystems?.[0];
+  },
+  space(mount) {
+    const stats = statfsSync(mount);
+    return {
+      availableBytes: stats.bavail * stats.bsize,
+      availableInodes: stats.ffree,
     };
-    const found = data.filesystems?.[0];
+  },
+};
+/** Read-only preflight: never creates a missing mount or root directory. */
+export function checkStorage(
+  config: Config,
+  probe: StorageProbe = nativeProbe,
+): void {
+  try {
+    const mount = config.storage.mount;
+    if (realpathSync(mount) !== mount) throw new Error("noncanonical mount");
+    const found = probe.mount(mount);
     if (
       !found ||
       found.target !== mount ||
@@ -57,6 +74,17 @@ export function checkStorage(config: Config): void {
       !found.options.split(",").includes("rw")
     )
       throw new Error("unexpected filesystem");
+    const capacity = probe.space(mount);
+    const minimum = config.storage.minFreeBytes ?? 512 * 1024 * 1024;
+    if (
+      !Number.isSafeInteger(minimum) ||
+      minimum < 1 ||
+      !Number.isSafeInteger(capacity.availableBytes) ||
+      capacity.availableBytes < minimum ||
+      !Number.isSafeInteger(capacity.availableInodes) ||
+      capacity.availableInodes < 1
+    )
+      throw new Error("insufficient or unknown storage capacity");
     accessSync(mount, constants.X_OK);
     safeDescendant(mount, config.storage.root);
     let writableParent = config.storage.root;
@@ -80,7 +108,7 @@ export function checkStorage(config: Config): void {
       );
   } catch {
     throw new Error(
-      "Storage preflight failed: require the configured writable ext4 mount/UUID and paths without symlinks",
+      "Storage preflight failed: require the configured writable ext4 mount/UUID, free space/inodes and paths without symlinks",
     );
   }
 }

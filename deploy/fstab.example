@@ -1,0 +1,3 @@
+# Proposed entry for this Pi, not a replacement for /etc/fstab.
+# Verify UUID and existing mounts; install only during approved deployment.
+UUID=c6d768c3-187e-43b0-b14e-cb6c659d06f7 /media/talaniz/postgresdata ext4 defaults,nosuid,nodev,nofail,x-systemd.device-timeout=30s,errors=remount-ro 0 2

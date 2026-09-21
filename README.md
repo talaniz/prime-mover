@@ -1,12 +1,12 @@
 # Prime Mover
 
-The planned durable workflow engine behind DOOM Control Room.
+The durable workflow engine under development behind DOOM Control Room.
 
 You set the objective. Prime Mover moves the pieces.
 
 ## Status
 
-Builds 001–006 implement integration contracts, durable scheduling, operator controls, project metadata, maintainer-authorized GitHub intake and supervised isolated implementation through a draft PR and independent code/E2E reviews with verified corrections, gated readiness and one durable notification. Full recovery, unattended operation and the DOOM Projects page remain under development. No unattended worker is running; nothing merges automatically.
+Builds 001–007 implement integration contracts, durable scheduling, operator controls, project metadata, maintainer-authorized GitHub intake and supervised isolated implementation through a draft PR and independent code/E2E reviews with verified corrections, gated readiness and one durable notification. Build 007 adds startup recovery, supervised service cycles, resource/storage guards and backup/restore. Complete MVA acceptance and the DOOM Projects page remain under development. Production activation is blocked until the planned mount and kernel memory-controller deployment prerequisites are verified. No unattended worker is running; nothing merges automatically.
 
 ## Intended workflow
 
@@ -31,7 +31,7 @@ codex-work/
   data/prime-mover/       # future SQLite databases and runtime state
 ```
 
-`/home/palpatine/prime-mover` is a convenience symlink to this checkout. Runtime databases belong outside repository clones; the data directory is currently empty. The existing DOOM checkout and PostgreSQL/n8n directories have not been moved.
+`/home/palpatine/prime-mover` is a convenience symlink to this checkout. Runtime databases belong outside repository clones. The existing DOOM checkout and PostgreSQL/n8n directories have not been moved.
 
 The drive is a roughly 30 GB USB flash device with a local ext4 filesystem. A temporary SQLite WAL database passed concurrent-reader, transaction-visibility, and integrity checks during initialization; the test database was removed. This is a functional check, not an endurance or power-loss test.
 
@@ -39,7 +39,7 @@ The mount currently uses the existing desktop-managed path and has no `/etc/fsta
 
 ## Development and verification
 
-Build 001 establishes the TypeScript/Node toolchain, configuration contracts and compatibility probes. Build 002 adds the durable store/scheduler, operator controls and metadata service. Build 003 adds opt-in issue intake; Build 004 adds bounded implementation and verified draft publication. Build 005 adds independent code review, public finding triage, bounded corrections and exact-head sign-off. Build 006 adds distinct E2E review, correction re-review, GitHub readiness gates and durable notification. Full operational recovery remains a future build. Follow `AGENTS.md` and the user's global PR review workflow.
+Build 001 establishes the TypeScript/Node toolchain, configuration contracts and compatibility probes. Build 002 adds the durable store/scheduler, operator controls and metadata service. Build 003 adds opt-in issue intake; Build 004 adds bounded implementation and verified draft publication. Build 005 adds independent code review, public finding triage, bounded corrections and exact-head sign-off. Build 006 adds distinct E2E review, correction re-review, GitHub readiness gates and durable notification. Build 007 adds durable recovery and operational tooling; unattended activation remains owner-gated. Follow `AGENTS.md` and the user's global PR review workflow.
 
 Current repository checks:
 
@@ -56,7 +56,7 @@ Credentials, environment-specific configuration, databases and their WAL/SHM sid
 Start with [harness/README.md](harness/README.md) for the eight ordered build contracts,
 test-first commit workflow, execution log, independent reviews, and release notes.
 The application milestone is in progress; Build 001 contracts and compatibility checks
-are complete. The durable store/scheduler, metadata backend and authorized intake are implemented through Build 006; full operational recovery and the dashboard remain under development.
+are complete. The durable store/scheduler, metadata backend and authorized intake are implemented through Build 007; complete MVA acceptance and the dashboard remain under development.
 
 ## Planned default projects
 
@@ -80,8 +80,8 @@ npm run check
 node dist/cli.js config-check config.example.json
 ```
 
-The current E2E command exercises the actual configuration CLI, not the future
-complete worker. Integration tests exercise local Unix WebSockets and SQLite WAL.
+The current E2E command exercises configuration, backup/restore and intake-guard CLI workflows.
+Complete live MVA acceptance is a separate gate. Integration tests exercise local Unix WebSockets and SQLite WAL.
 See [architecture and contracts](docs/architecture.md) for schema, compatibility,
 credential boundaries and the read-only metadata API. Runtime intake is not enabled.
 
@@ -280,8 +280,7 @@ PR remains a draft; merge and deployment require human approval.
 
 `recheck-ready` refreshes authorization, workspace/PR identity and GitHub check state.
 A failed or unavailable check revokes local readiness into a visible blocker. This
-command is supervised; automatic periodic rechecking belongs to the service/recovery
-build. The public readiness comment identifies its verified snapshot and does not
+command is supervised; Build 007 service cycles also perform periodic rechecking. The public readiness comment identifies its verified snapshot and does not
 promise that later changes retain readiness or that email/push was delivered.
 
 If checks recover without a code/contract change, inspect the blocker, then use the
@@ -295,3 +294,31 @@ owned private fixture. `scripts/rehearse-readiness-recovery.mjs E2E_EVIDENCE NEW
 injects a failed fixture commit status, checks revocation, restores that status and
 proves recovery without duplicate tasks/notifications. Both preserve evidence and
 refuse to overwrite an earlier attempt. They do not modify production services.
+
+
+## Recovery and service operations (Build 007)
+
+```sh
+node dist/cli.js recover-once config.local.json
+node dist/cli.js cycle config.local.json
+node scripts/worker-service.mjs config.local.json 2
+node dist/cli.js service-preflight config.local.json
+node dist/cli.js backup config.local.json RUNTIME_ROOT/backups/snapshot.sqlite
+node dist/cli.js restore-check config.local.json RUNTIME_ROOT/backups/snapshot.sqlite RUNTIME_ROOT/restores/check/jobs.sqlite
+```
+
+`recover-once` reconciles interrupted ownership without claiming a new queued job.
+`cycle` reconciles first, rechecks ready results, then advances one review stage or
+performs intake and one implementation. The supervisor repeats sequential cycles;
+omitting the finite-cycle argument runs until stopped or its failure limit is reached.
+Standalone `poll` refuses live/expired ownership or pending execution intents: reconcile
+first. SIGTERM stops new execution and observes/interrupts only owned work; uncertain
+reservations remain durable. Backups are SQLite-consistent database snapshots, and
+restore checks leave isolated copies paused.
+
+See [recovery and fault evidence](docs/recovery.md) and
+[service operations](docs/service-operations.md) for retention, upgrade/rollback,
+service templates, persistent mount setup and the verified deployment limitations.
+This Pi currently boots with `cgroup_disable=memory`; service preflight refuses
+unattended activation until kernel memory accounting and actual limits are verified.
+No templates have been installed/enabled, and no boot settings have been changed.

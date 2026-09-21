@@ -8,7 +8,7 @@ export interface ProjectConfig {
 export interface Config {
   schemaVersion: 1;
   gitAuthor?: {name: string; email: string};
-  storage: {mount: string; uuid: string; root: string};
+  storage: {mount: string; uuid: string; root: string; minFreeBytes?: number};
   appServer: {socket: string; version: string};
   metadata: {socket: string; tokenFile: string; freshnessSeconds: number};
   limits: {activeJobs: 1; activeTurns: 1; transportAttempts: number; correctionCycles: number; turnSeconds: number; jobSeconds: number};
@@ -62,8 +62,8 @@ export function validateConfig(value: unknown): Config {
     if (gitAuthor.name.length>100 || /[<>]/.test(gitAuthor.name) || gitAuthor.email.length>254 || !/^[^\s<>@]+@[^\s<>@]+$/.test(gitAuthor.email)) invalid('gitAuthor');
   }
   if (c.schemaVersion !== 1) invalid('schemaVersion');
-  const s = record(c.storage, ['mount','uuid','root'], 'storage');
-  const storage = {mount:absolute(s.mount,'storage.mount'),uuid:text(s.uuid,'storage.uuid'),root:absolute(s.root,'storage.root')};
+  const s = record(c.storage, ['mount','uuid','root'], 'storage', ['minFreeBytes']);
+  const storage = {mount:absolute(s.mount,'storage.mount'),uuid:text(s.uuid,'storage.uuid'),root:absolute(s.root,'storage.root'),...(Object.hasOwn(s,'minFreeBytes') ? {minFreeBytes:positive(s.minFreeBytes,'storage.minFreeBytes')} : {})};
   if (!isWithin(storage.mount, storage.root)) invalid('storage.root must be below mount');
   const a = record(c.appServer,['socket','version'],'appServer');
   const appServer = {socket:absolute(a.socket,'appServer.socket'),version:text(a.version,'appServer.version')};

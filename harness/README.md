@@ -2,7 +2,7 @@
 
 One milestone: **Minimum Viable Application (MVA)**. One application implementation
 branch and PR hold all build commits and subsequent review fixes/release notes.
-Application execution is in progress: Builds 001–006 are complete; builds 007–008 remain pending.
+Application execution is in progress: Builds 001–007 are complete; Build 008 remains pending.
 The execution log contains actual evidence and remaining gates.
 
 ## Layout
@@ -65,4 +65,4 @@ The MVA tracks **Prime Mover** (`talaniz/prime-mover`) and **DOOM Dashboard**
 [the project metadata contract](project-metadata.md) for registry defaults, the
 read-only Projects page in the existing DOOM Dashboard, build ownership and
 cross-repository delivery. The default registry/metadata backend is implemented through Build 002. The DOOM page
-and complete execution pipeline remain pending; no unattended service is activated.
+and complete MVA acceptance remain pending; no unattended service is activated.

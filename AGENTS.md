@@ -13,8 +13,8 @@ Record material tradeoffs in the relevant design or PR. These priorities guide t
 
 ## Scope and sources of truth
 
-Prime Mover is the durable workflow worker behind DOOM. Builds 001–006 provide contracts, durable storage/scheduling, operator controls, metadata, authorized issue intake and supervised isolated implementation through a draft PR and independent code/E2E reviews with verified corrections and gated readiness.
-Full recovery, service operations and complete MVA/dashboard integration remain under development.
+Prime Mover is the durable workflow worker behind DOOM. Builds 001–007 provide contracts, durable storage/scheduling, operator controls, metadata, authorized issue intake and supervised isolated implementation through a draft PR and independent code/E2E reviews with verified corrections and gated readiness.
+Build 007 adds recovery, supervised services and operational safeguards. Complete MVA/dashboard integration remains under development; production mount/kernel prerequisites and activation remain owner-gated.
 Read `harness/README.md`, the next build in `harness/builds/`, and `harness/execution-log.md` before work.
 The execution log is the evidence-backed source of truth for progress and release notes;
 build files specify intended behavior, not completed behavior. Git and PR evidence resolve

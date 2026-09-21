@@ -1,0 +1,23 @@
+[Unit]
+Description=Prime Mover read-only operator metadata
+RequiresMountsFor=/media/talaniz/postgresdata/codex-work
+ConditionPathIsMountPoint=/media/talaniz/postgresdata
+StartLimitIntervalSec=600
+StartLimitBurst=3
+
+[Service]
+Type=simple
+WorkingDirectory=/home/palpatine/prime-mover
+Environment=PATH=/home/palpatine/.local/opt/node-v22.23.2-linux-arm64/bin:/home/palpatine/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStartPre=/usr/bin/grep -qw memory /sys/fs/cgroup/cgroup.controllers
+ExecStart=/home/palpatine/.local/opt/node-v22.23.2-linux-arm64/bin/node /home/palpatine/prime-mover/dist/cli.js metadata /home/palpatine/.config/prime-mover/config.json
+Restart=on-failure
+RestartSec=30
+TimeoutStopSec=15
+UMask=0077
+MemoryHigh=128M
+MemoryMax=256M
+TasksMax=32
+
+[Install]
+WantedBy=default.target

@@ -1,9 +1,18 @@
+import { backupDatabase, restoreDatabase } from "./backup.js";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { randomUUID } from "node:crypto";
 import { Reviews } from "./reviews.js";
 import { readinessEvidence, type RemoteReadiness } from "./readiness.js";
 import type { ProjectConfig } from "./config.js";
 import type { JobStage } from "./contracts.js";
+
+export type RecoveryStage =
+  | "preparing"
+  | "code-review"
+  | "e2e-review"
+  | "code-fixes"
+  | "e2e-fixes"
+  | "verifying";
 
 export interface Lease {
   jobId: string;
@@ -165,6 +174,12 @@ export class Store {
       this.db.close();
       throw error;
     }
+  }
+  async backupTo(filename: string) {
+    return backupDatabase(this.db, filename);
+  }
+  static async restoreBackup(source: string, destination: string) {
+    return restoreDatabase(source, destination);
   }
   close(): void {
     if (!this.closed) {
@@ -590,6 +605,205 @@ export class Store {
       this.event(id, "claimed", { owner, epoch: job.leaseEpoch });
       return { jobId: id, owner, epoch: job.leaseEpoch };
     });
+  }
+  /** Adopt only local fencing; remote turns and pending sends remain reserved. */
+  claimRecovery(id: string, owner: string, duration: number): Lease {
+    required(owner);
+    if (!Number.isSafeInteger(duration) || duration < 1)
+      throw new Error("Invalid recovery lease duration");
+    return this.transaction(() => {
+      const job = this.job(id);
+      if (
+        !job ||
+        terminal.has(job.stage) ||
+        ["queued", "discovered", "authorized", "ready"].includes(job.stage)
+      )
+        throw new Error("Job does not require execution recovery");
+      if (
+        job.leaseOwner &&
+        (job.leaseUntil === null || job.leaseUntil > this.now())
+      )
+        throw new Error("Live lease cannot be adopted before expiry");
+      if (
+        this.one(
+          "SELECT id FROM jobs WHERE id<>? AND (lease_owner IS NOT NULL OR active_turn_id IS NOT NULL)",
+          id,
+        ) ||
+        this.one(
+          "SELECT job_id FROM operations WHERE job_id<>? AND status='pending'",
+          id,
+        ) ||
+        this.one(
+          "SELECT job_id FROM outbox WHERE job_id<>? AND status='pending'",
+          id,
+        )
+      )
+        throw new Error("Another reservation requires recovery first");
+      const epoch = job.leaseEpoch + 1,
+        attempt = job.attempts + 1;
+      this.run(
+        "UPDATE jobs SET lease_owner=?,lease_epoch=?,lease_until=?,attempts=?,updated_at=? WHERE id=?",
+        owner,
+        epoch,
+        this.now() + duration,
+        attempt,
+        this.now(),
+        id,
+      );
+      this.run(
+        "INSERT INTO attempts VALUES (?,?,?,?,?)",
+        id,
+        attempt,
+        owner,
+        epoch,
+        this.now(),
+      );
+      this.event(id, "recovery-claimed", {
+        previousOwner: job.leaseOwner,
+        owner,
+        epoch,
+        remoteReservationRetained: true,
+      });
+      return { jobId: id, owner, epoch };
+    });
+  }
+  /** Recover the pre-intent crash window without giving a restart a fresh deadline. */
+  recoverExecutionBudget(lease: Lease, jobSeconds: number): number {
+    if (!Number.isSafeInteger(jobSeconds) || jobSeconds < 1)
+      throw new Error("Invalid recovery time budget");
+    return this.transaction(() => {
+      const job = this.assertWorker(lease);
+      const operations = this.operations(job.id);
+      const prior = operations.find((o) => o.key === "implementation-budget");
+      if (prior) {
+        const deadline = (prior.input as { deadline?: number } | null)
+          ?.deadline;
+        if (
+          prior.kind !== "execution-budget" ||
+          !Number.isSafeInteger(deadline) ||
+          Number(deadline) <= this.now()
+        )
+          throw new Error("Recovery execution budget exhausted or invalid");
+        return Number(deadline);
+      }
+      if (
+        operations.length ||
+        this.hasPending(job.id) ||
+        job.activeThreadId ||
+        job.activeTurnId ||
+        job.prNumber !== null
+      )
+        throw new Error(
+          "Missing execution budget with recorded intents requires reconciliation",
+        );
+      const first = this.one(
+        "SELECT MIN(started_at) AS started FROM attempts WHERE job_id=?",
+        job.id,
+      );
+      const started = first?.started;
+      const deadline = Number(started) + jobSeconds * 1000;
+      if (
+        started === null ||
+        started === undefined ||
+        !Number.isSafeInteger(deadline) ||
+        deadline <= this.now()
+      )
+        throw new Error("Recovery execution deadline exhausted or missing");
+      const budget = { deadline };
+      this.run(
+        "INSERT INTO operations VALUES (?, 'implementation-budget', 'execution-budget', ?, 'done', ?, ?, ?)",
+        job.id,
+        json(budget),
+        json(budget),
+        this.now(),
+        this.now(),
+      );
+      this.event(job.id, "operation-intent", {
+        key: "implementation-budget",
+        kind: "execution-budget",
+      });
+      this.event(job.id, "operation-result", { key: "implementation-budget" });
+      this.event(job.id, "execution-budget-recovered", {
+        startedAt: Number(started),
+        deadline,
+      });
+      return deadline;
+    });
+  }
+  /** Continue recorded workflow only after the caller refreshes authorization/evidence. */
+  resumeRecovery(lease: Lease, stage: RecoveryStage, limit: number): void {
+    if (
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      ![
+        "preparing",
+        "code-review",
+        "e2e-review",
+        "code-fixes",
+        "e2e-fixes",
+        "verifying",
+      ].includes(stage)
+    )
+      throw new Error("Invalid recovery contract");
+    this.transaction(() => {
+      const job = this.assertWorker(lease);
+      const deadline = (
+        this.operations(job.id).find((o) => o.key === "implementation-budget")
+          ?.input as { deadline?: number } | undefined
+      )?.deadline;
+      if (!Number.isSafeInteger(deadline) || Number(deadline) <= this.now())
+        throw new Error("Recovery execution budget exhausted or missing");
+      if ((stage === "preparing") !== (job.prNumber === null))
+        throw new Error("Recovery stage does not match publication state");
+      const prior = this.events(job.id).find(
+        (e) =>
+          e.kind === "recovery-resumed" &&
+          (e.detail as { epoch?: number }).epoch === lease.epoch,
+      );
+      if (prior) {
+        const record = prior.detail as {
+          stage: string;
+          deadline: number;
+          limit: number;
+        };
+        if (
+          record.stage !== stage ||
+          record.deadline !== deadline ||
+          record.limit !== limit
+        )
+          throw new Error("Recovery intent mismatch");
+        return;
+      }
+      const used = Number(
+        this.one(
+          "SELECT used FROM budgets WHERE job_id=? AND name='recovery-attempts'",
+          job.id,
+        )?.used ?? 0,
+      );
+      if (used >= limit) throw new Error("Recovery attempt budget exhausted");
+      this.run(
+        "INSERT INTO budgets(job_id,name,used) VALUES (?,'recovery-attempts',?) ON CONFLICT(job_id,name) DO UPDATE SET used=excluded.used",
+        job.id,
+        used + 1,
+      );
+      this.run(
+        "UPDATE jobs SET stage=?,block_code=NULL,resume_stage=NULL,retry_at=NULL,updated_at=? WHERE id=?",
+        stage,
+        this.now(),
+        job.id,
+      );
+      this.event(job.id, "recovery-resumed", {
+        epoch: lease.epoch,
+        stage,
+        deadline,
+        limit,
+        attempt: used + 1,
+      });
+    });
+  }
+  /** Ownership only: permits observation and stopping after authorization is withdrawn. */
+  assertRecoveryLease(lease: Lease): Job {
+    return this.assertLease(lease);
   }
   private assertLease(lease: Lease): Job {
     const j = lease && this.job(lease.jobId);
@@ -1283,6 +1497,15 @@ export class Store {
       );
     return j;
   }
+  hasExecutionReservation(): boolean {
+    return (
+      Boolean(
+        this.one(
+          "SELECT id FROM jobs WHERE lease_owner IS NOT NULL OR active_turn_id IS NOT NULL",
+        ),
+      ) || this.hasPending()
+    );
+  }
   private hasPending(id?: string): boolean {
     const where = id === undefined ? "" : " AND job_id=?";
     const args = id === undefined ? [] : [id];
@@ -1328,6 +1551,12 @@ export class Store {
       );
       this.event(j.id, "cancelled", {});
     });
+  }
+  budgetUsed(id: string, name: string): number {
+    return Number(
+      this.one("SELECT used FROM budgets WHERE job_id=? AND name=?", id, name)
+        ?.used ?? 0,
+    );
   }
   consumeBudget(lease: Lease, name: string, limit: number): number {
     required(name);
