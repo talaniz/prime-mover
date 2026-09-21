@@ -324,3 +324,9 @@ No templates have been installed/enabled, and no boot settings have been changed
 See [the acceptance index](docs/mva-acceptance.md) for the eight criteria, actual fixture
 PR/review/notification evidence, DOOM integration, fresh-checkout commands and remaining
 review/deployment gates. The product PRs remain subject to independent final-head reviews.
+
+## Reporting issues
+
+Use the feature, bug report, or documentation form when opening an issue. See
+[issue reporting](docs/issue-reporting.md) for the required fields and separate
+Prime Mover authorization step.
