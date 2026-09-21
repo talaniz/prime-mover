@@ -48,7 +48,9 @@ changing production issues or checkouts.
 
 ## Repeatable checks
 
-From a fresh clone of the intended PR head with Node 22.23.2 / npm 10.9.8:
+From a fresh clone of the intended PR head on Linux with Node 22.23.2 / npm 10.9.8,
+Git and Bubblewrap (`/usr/bin/bwrap`) installed, and unprivileged user namespaces
+available for isolated verification:
 
 ```sh
 npm ci --ignore-scripts
@@ -61,7 +63,9 @@ The Build 008 integration/acceptance scripts are separately exercised against th
 actual Pi environment; later behavioral changes require relevant new verification.
 CI uses the same dependency/check commands, pinned actions, read-only repository
 permissions, no persisted checkout credential and no injected production secrets.
-Live scripts are not invoked in CI.
+The Ubuntu 22.04 CI job installs Bubblewrap and proves namespace creation before
+running checks. Missing sandbox prerequisites are errors; tests are never skipped
+or run without isolation as a fallback. Live scripts are not invoked in CI.
 
 Run supervised live acceptance only against the owner-controlled disposable fixture.
 `scripts/verify-mva-fixture.mjs` observes a completed fixture, independently exercises

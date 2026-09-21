@@ -1543,3 +1543,22 @@ suite are finished. No live DOOM process was touched and no test process remains
   and this log. CI must run after publication; independent PM code/E2E reviews,
   DOOM final reviews, release notes and final-head revalidation remain outstanding.
   This is not a claim of completed MVA delivery or permission to merge/deploy.
+
+### Build 008 CI prerequisite correction (Fixes-Build: 008)
+
+The first GitHub run at `f0619de` failed:
+https://github.com/talaniz/prime-mover/actions/runs/35557127129.
+All 77 unit tests passed; 9 isolated-verification integration paths failed (190/199
+passed). A command expected to exit 17 instead returned null, and successful
+sandbox commands returned failed. The workflow omitted installation/probing of
+`/usr/bin/bwrap`, although those tests deliberately use the real verification sandbox.
+The Pi had this prerequisite, explaining the local/CI environment mismatch; detailed
+runner diagnostics were not emitted by the initial assertions, so no deeper kernel
+failure is claimed as verified.
+
+Acceptance: provision the documented sandbox on the ephemeral CI runner, prove its
+namespaces before tests, and pass the unchanged test suite without weakening isolation
+or skipping failures. Switched the runner to Ubuntu 22.04, installed Bubblewrap and
+added an explicit fail-fast namespace probe. Documented the Linux/Git/Bubblewrap
+fresh-checkout prerequisites. The original failed run is preserved; the next GitHub
+run must prove green. No Pi package, kernel, permission or service settings changed.
