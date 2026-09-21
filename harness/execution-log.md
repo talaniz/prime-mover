@@ -576,3 +576,330 @@ Build 004 exit gate is complete. This is its single primary implementation commi
 Builds 005–008, automated review/fix cycles, DOOM Projects integration, operations
 acceptance and independent milestone reviews remain outstanding. No unattended worker,
 merge, deployment or MVA completion is claimed.
+
+## Build 005 execution contract (in progress)
+
+Continue from Build 004 `0e9f7508dcd00ed4acd0d0eacb918bd30e250565` on the same
+milestone branch/PR. Implement separate owned code-review tasks, complete commit-list
+and aggregate-diff input, structured reports, durable findings/dispositions and public
+attributed comments. Accepted findings need concrete acceptance/verification before
+fixes; rejected/deferred findings need public rationale and reviewer confirmation.
+Every changed head invalidates prior sign-off. No E2E entry without current-head code
+sign-off; missing checks/report evidence or disputed blockers cannot pass.
+
+Start with real SQLite state and pure report validation: bind head/base/commit list,
+reject implementer identity, stale or incomplete review coverage, missing report URLs,
+missing actual checks and unresolved/disputed findings. Persist triage across reopen,
+consume correction budgets without resetting on restart, and reject premature E2E
+transitions. Then extend app-server role/report handling and GitHub comment delivery
+with crash-response tests before a live independent fixture review/fix/revalidation.
+The live gate must include a seeded defect and public exact-head reviewer evidence;
+unit success alone cannot complete this build. One primary Build 005 commit only
+after that entire gate. No partial-build commit or production service change.
+
+### Build 005 foundation progress — not the build exit gate
+
+Added a durable typed review ledger over existing fenced immutable operation records,
+without a database schema migration. Operations now read in SQLite insertion order
+rather than timestamp/key order, avoiding same-millisecond ordering ambiguity. Review
+head bindings include the complete ordered commit list; reports are tied to a binding
+revision so moving away and back cannot revive an old sign-off. Public report URLs,
+owned reviewer task/turn identity, independent role, actual check descriptions and
+absence of unresolved limitations/findings are required. The state machine now rejects
+E2E entry before current-head code sign-off. Findings/dispositions persist across
+reopen; accepted findings require acceptance/verification contracts, deferred/rejected
+ones public rationale, and reviewer-confirmed resolutions/dispositions before sign-off.
+Correction reservations retain a persistent bounded counter and idempotent per-cycle
+intent. A crash between charging the budget and saving the reservation conservatively
+over-counts an attempt; it never grants an unbudgeted correction or resets the budget.
+
+`PrComments` publishes attributed coordinator comments, not formal GitHub approvals.
+It checks current authorization before new sends, records a random marker/full body/
+author, paginates existing comments and reconciles a lost response only by exact body
+and author. Ambiguous absence, duplicate matches or a changed report stays blocked;
+no blind repeat POST. `ExecutionAgent` now persists reviewer role and output schema,
+uses independent-review instructions, rejects role/schema drift on replay, and reads
+final report text only after completed owned-turn proof. Commentary/missing output
+cannot substitute for a final report. Live use of these new review paths is pending.
+
+Observed test-first evidence:
+- Six initial ledger/state tests failed with missing required rejections; implemented
+  current-head coverage/identity/triage checks and all six passed. Real SQLite reopen
+  verified persistence. A seventh test then exposed revival after head B→C→B (missing
+  expected exception); binding revisions fixed it. State/store/scheduler: 27 passed.
+- An unrecorded reviewer task/turn was initially accepted (7 pass/1 fail); persisted
+  ownership checks fixed it (8 passed). Further tests exposed an implementation role
+  hidden under a review key and absent accepted-contract/correction-budget guards
+  (8 pass/2 fail). Explicit review role plus persistent correction reservations fixed
+  both. All ten ledger cases now pass, including repeat/reopen/exhaustion behavior.
+- Four initial comment-delivery tests failed: missing canonical URL/durability and
+  missing lost-response/withdrawal rejections. Implemented delivery/reconciliation;
+  all four pass, including paginated lookup and wrong-author/absent-comment refusal.
+- Three adapter tests failed on implementation instructions for a review role and
+  missing terminal/missing-report rejection (14 pass/3 fail). Role/schema persistence
+  and authoritative final-result extraction fixed them; all 17 adapter cases pass.
+- Formatted the new modules/tests with the existing cached Prettier executable. The
+  focused ledger/comment/adapter suite passed **31 tests**, exit 0. Full regression
+  `npm run check` exited 0: **48 unit + 111 integration + 4 CLI E2E = 163 passed**,
+  no failures/skips. `git diff --check` passed. Raw ignored evidence uses
+  `005-reviews-red.txt`, `005-head-return-red.txt`, `005-review-ownership-red.txt`,
+  `005-fix-budget-red.txt`, `005-comments-red.txt`, `005-agent-red.txt`,
+  `005-foundation-green.txt` and `005-foundation-check.txt`.
+
+These are intentionally uncommitted Build 005 foundations. Remaining work includes
+claiming/releasing review jobs, validating model reports before publication, gathering
+all actual commits/diff/contract input, reviewer-task continuation, coordinator triage,
+verified correction/republication and same-reviewer revalidation, then a live seeded
+finding/fix/sign-off rehearsal. The existing Build 004 fixture used a 15-minute job
+budget; do not reset its expired budget to manufacture a successful continuation.
+Prepare a separately identified supervised review fixture when needed, preserving the
+existing completed implementation evidence. No new live review task or comment was
+sent by the foundation tests. Build 005 must not be committed/marked complete before
+its complete live gate; Builds 006–008 and both milestone reviews remain pending.
+
+### Build 005 coordinator boundaries — in progress
+
+Revalidated the working tree and Build 005 contract; the preceding goal turn made
+concrete progress (Build 004 was pushed, and review foundations passed regression).
+Added serialized code-review claims for published, authorized, reconciled jobs. Claims
+respect global reservations, pause, project availability and intake-invalid fencing,
+advance the lease epoch and retain attempt evidence. Successful review releases the
+lease into the pending E2E stage only with current-head code sign-off and no active
+turn or pending operation. The ordinary E2E transition now enforces the same active/
+pending-work restriction. No E2E task is started by this handoff.
+
+Separated `Reviews.validate` from `record`: the coordinator can reject a stale,
+self-reviewed, incomplete or unsupported sign-off before publishing any comment,
+without manufacturing a placeholder report URL. Persisting a report still requires
+its actual canonical owned-PR comment URL and repeats validation. Added `ReviewInputs`
+to collect real local Git commit history, each commit's patch and the aggregate diff,
+checking the owned published PR's number/head/base/branch/state and clean workspace.
+Changed targets fail closed; input is bounded at 1,000 commits/512 KiB of patches.
+Large inputs block for operator action rather than silently omit review coverage.
+
+Observed red/green:
+- Review-claim stubs produced 10 passes/2 failures: an occupied/invalid claim was not
+  rejected and a published job remained pr-open instead of acquiring code-review.
+  Implemented fenced claims/handoff; the review/store/scheduler suite passed 32 tests.
+- Prepublication validation initially did not reject invalid draft reports (12 passes,
+  1 failure: missing expected exception). Moved the existing validation into a shared
+  non-mutating method; the same 13 ledger cases passed, including unchanged operation
+  count during validation and actual URL requirements during persistence.
+- Real-Git input tests first failed both cases: wrong head/empty commit coverage and
+  missing rejection for a different PR. Implemented collection and drift/scope checks;
+  all 35 review-input/ledger/store/scheduler tests passed after formatting. These cover
+  two actual commits, aggregate diff, changed remote head/base, wrong PR, dirty output,
+  blocked active-turn handoff, SQLite persistence and existing schema upgrade.
+
+Ignored evidence: `005-review-claim-red.txt`, `005-review-claim-green.txt`,
+`005-report-validation-red.txt`, `005-report-validation-green.txt`,
+`005-review-input-red.txt`, `005-review-input-green.txt`.
+No new live task, GitHub comment or production service change occurred in this step.
+Next required implementation is the actual review-round coordinator: collect/bind
+these inputs, start or reconcile the independent reviewer, validate terminal structured
+output before posting, then run coordinator triage/accepted fixes/reverification and
+same-reviewer revalidation. Preserve the original job deadline and correction budget.
+The CLI and live seeded-defect rehearsal must exercise that complete path before the
+single primary Build 005 commit. Build 005 remains incomplete and uncommitted.
+
+Coordinator-boundary regression: `npm run check` exited 0 after the final changes:
+**48 unit + 116 integration + 4 CLI E2E = 168 passed**, zero failed/skipped. Raw output
+is ignored `harness/build/005-coordinator-boundaries-check.txt`; `git diff --check`
+passed. This is regression evidence for the current intermediate work, not completion
+of Build 005 or live review acceptance.
+
+### Build 005 review-round coordinator — in progress
+
+Added `CodeReviewRound` connecting the actual input collector, independent app-server
+adapter, report validator, attributed comment publisher and durable review records.
+It supplies the full commit/diff/contract and prior evidence, persists the round prompt
+and original absolute job deadline, requests structured reviewer output, monitors
+approval/cancellation/budgets, and validates terminal output before publication. It
+re-fetches authorization and the PR/workspace target before and after posting. Report
+publication and the recorded head/base remain distinct from final E2E handoff. Public
+findings/blocked reports cannot qualify as sign-off; a completed round can replay its
+recorded result without starting another task or posting another report.
+
+Added explicit owned-task reuse to `ExecutionAgent` so correction re-review stays with
+the original independent reviewer and starts a separately correlated turn. Recorded
+role cannot be changed by reusing a task. A new/different turn is rejected before any
+RPC side effect while another turn is reserved; reconciliation of the exact recorded
+turn remains allowed. `CodeReviewRound` uses the first owned code-review task for
+subsequent rounds. Implementation and E2E identities remain separate.
+
+Observed red/green evidence:
+- Seven round-coordinator tests initially failed: no published exact-head report,
+  missing invalid/drift/failed/expired rejections, missing public findings and absent
+  approval wait. Implemented the connected round; all seven passed. These use actual
+  SQLite review/operation state and the real PrComments delivery logic, with modeled
+  app-server/GitHub/input boundaries already exercised by their adapter suites.
+- Follow-up tests reproduced a second thread/start instead of reviewer reuse and
+  admission of another turn while one was reserved (17 existing passes/2 failures).
+  Role-preserving alias records plus pre-send reservation checks fixed both; combined
+  round/adapter suite passed 26 tests. No thread/turn replacement is inferred from a
+  timeout or missing result.
+- Added a combined lost-comment-response replay test: it passed against the persisted
+  round and exact-body/author reconciliation, with one comment and one task intent.
+  Another test exposed a late completed observation being accepted after a timeout
+  (8 passes/1 failure: missing expected rejection). Persisted a review-stop intent and
+  retain that stop across replay; late completion and another invocation both refuse
+  publication. The round/adapter suite then passed **28 tests**, exit 0, no skips.
+
+Ignored evidence: `005-round-red.txt`, `005-round-green.txt`, `005-followup-red.txt`,
+`005-followup-green.txt`, `005-round-recovery-red.txt`, `005-round-recovery-green.txt`.
+No live review task or report was sent in these tests. The complete correction loop,
+CLI integration and seeded live finding/fix/re-review gate remain pending. Next, use
+this round within the outer coordinator: structured main-task triage with public
+rationale/contracts, bounded accepted-finding implementation, configured verification
+and publication, then same-reviewer revalidation until sign-off or an honest blocker.
+Only after that complete live gate may Build 005 receive its primary commit.
+
+Review-round regression: final `npm run check` exited 0 with **48 unit + 127 integration
++ 4 CLI E2E = 179 passed**, zero failed/skipped. Ignored output:
+`harness/build/005-round-check.txt`. `git diff --check` passed. These changes remain
+uncommitted as part of Build 005; no partial-build commit, live acceptance claim,
+review sign-off on the milestone PR, merge or deployment is implied.
+
+### Build 005 correction loop and CLI — live acceptance in progress
+
+Added `ReviewCoordinator` around review rounds: preserve the original job deadline,
+obtain structured implementation-task triage without edits, validate complete finding
+coverage, publish public rationale/acceptance/verification before corrections, charge
+persistent correction budgets, implement accepted changes on the original task, commit
+and run configured sandboxed checks, update the same PR, publish actual check evidence,
+and return to the original reviewer. Deferred/rejected decisions return for independent
+assessment; unresolved disagreement and exhausted budgets block. A sign-off releases
+the job only after a fresh target/authorization check and the existing ledger gate.
+Task/cycle/triage/correction checkpoints retain progress rather than repeat completed
+sends. Added `code-review CONFIG JOB_ID` to claim one published job and run the loop;
+success means pending E2E, not readiness or approval to merge.
+
+Extracted the already-tested command evidence runner into `CommandEvidence`, used by
+both implementation and corrections, and the review wait loop into `waitForAgent`.
+The behavior-preserving extraction retains isolation, artifacts, approval handling,
+authorization cadence and persistent timeout stops. Added the guarded verifying→
+code-review transition for corrections only when an existing PR is recorded.
+
+Three actual-Git/sandbox integration cases failed before implementation: the seeded
+finding did not reach E2E handoff, and neither failed-verification nor invalid-triage
+cases performed the required review. After implementation all three passed, alongside
+existing implementation/round cases (**18 passed**). The successful case exercises
+public triage, an actual corrective commit, a real passing node:test command in the
+sandbox, push to a local bare remote and same-reviewer sign-off. Failed checks and
+unknown finding IDs block; invalid triage performs no fix. App-server/GitHub responses
+are modeled here; mandatory live acceptance follows separately.
+
+Full `npm run check` after CLI integration and formatting exited 0: **48 unit + 130
+integration + 4 CLI E2E = 182 passed**, zero failed/skipped. Ignored evidence:
+`005-cycle-red.txt`, `005-cycle-green.txt`, `005-cycle-check.txt`. The CLI E2E suite
+still covers its existing configuration commands; the actual code-review CLI will
+be exercised by the live rehearsal, not inferred from these tests.
+
+The new `rehearse-review.mjs` performs a fresh supervised implementation, deliberately
+seeds a known outer-whitespace greeting defect with passing smoke tests, independently
+confirms the defect, invokes the actual code-review CLI, and requires public finding,
+triage/fix/check evidence and same-task final-head sign-off. It independently checks
+the corrected module afterward. The implementation rehearsal accepts a bounded
+900–21600-second fixture job budget so this separate review fixture can run within a
+single original six-hour deadline; it does not reset an existing job's budget.
+
+First live launch stopped before any task/turn creation: the fresh runtime discovered
+still-authorized old fixture issue #5 before newly created issue #7. Its deterministic
+branch already existed beyond the base, so worktree ownership validation blocked.
+Authoritative stored operations showed only completed budget/plan and pending local
+workspace-create for the old issue; neither job had task/turn intent, active turn or
+lease. Removed #5's stale codex-ready label, closed/unlabelled unused #7, and cancelled
+both local fixture jobs. The old local preparation remains cancel-requested/blocked
+with its intent retained, not falsely completed; the unused queued job is cancelled.
+Preserved all evidence at `005-live-review.json` and its implementation artifact.
+No implementation turn was retried or replaced. Added a fixture preflight refusing
+any prior open codex-ready issue before creating another isolated rehearsal.
+
+A separately identified retry is now running with evidence at
+`harness/build/005-live-review-retry.json`. It is not yet acceptance evidence. Keep
+observing that exact process/runtime; never relaunch because an observation times out.
+Build 005 remains uncommitted until the full live gate passes.
+
+Live retry implementation initially stopped immediately after recording its accepted
+turn, with a generic implementation-error and the reservation retained. The original
+raw observation error was not persisted, so its precise cause is not established.
+Authoritative inspection of task `01a0c12d-d324-7492-84a1-07c338ccaea1`, turn
+`01a0c12d-d3c7-7363-9e91-c2255048c3b9`, first showed inProgress and then, at
+2026-09-20 23:39:03 UTC, completed/notLoaded before its 23:41:41 turn deadline.
+No replacement task/turn was started and no interruption was needed.
+
+Added test-first recovery for this retained expired reservation: two new cases failed
+(19 passes/2 failures), demonstrating refusal of completed-task continuation and an
+unhandled transient read. `proveCompleted` now returns the verified task/turn identity;
+explicit publication continuation may reconcile a stale owned reservation only with
+that exact proof and expired lease, fresh authorization and all prior project/global
+fences. Missing/mismatched proof cannot clear the reservation. Separately, read-only
+thread metadata/history requests retry at most three times; side-effect sends do not.
+Exhaustion has a fixed observation-unavailable blocker. These changes do not establish
+which original read failed or turn transport errors into successful execution.
+The affected adapter/implementation/correction suites passed **30 tests**. Evidence:
+`005-live-recovery-red.txt`, `005-live-recovery-green.txt`.
+
+The explicit continuation returned pr-open, exit 0, using the same task, turn and
+original six-hour job deadline. [Issue #8](https://github.com/talaniz/prime-mover-fixture/issues/8)
+now has [draft PR #9](https://github.com/talaniz/prime-mover-fixture/pull/9), initial head
+`08425f0e21b373935b902d4e4883c66df36431f5`, base
+`eee4090de3540b66a25e2ee9195ada3bbec68f00`. Independent normal/trimmed/invalid-input
+assertions and configured tests passed. Preserved the initial failure plus continuation
+in the implementation evidence; ignored verification/continuation helpers start no
+replacement implementation and refuse the wrong continuation phase.
+
+The same job `ca4050a9-4f27-4b94-89a8-30f7cfbc449e` then received the deliberate
+seed at `43bec933e1ca9064a8d03516e4914d0a0d084f24`; its smoke tests passed and an
+independent assertion confirmed the outer-whitespace defect. The actual code-review
+CLI started distinct reviewer task `01a0c134-c48e-7c43-8db7-064589335e8c`, which posted
+[changes requested](https://github.com/talaniz/prime-mover-fixture/pull/9#issuecomment-5753613857).
+The coordinator published triage/contracts and used the original implementation task
+for correction. Configured verification passed on corrective head
+`e551f21f408e05d351aca388ca07a8908c5d8772`, and re-review is now running on the same
+independent reviewer task. Final sign-off and independent final acceptance are not yet
+claimed; continue observing the existing rehearsal rather than relaunching it.
+
+### Build 005 — live gate completed and primary delivery
+
+The first corrective re-review completed at the correct head but combined sign-off
+with a limitation describing an already-resolved `spawnSync EPERM` tooling failure.
+The strict gate rejected that contradictory report before publication. It did not
+silently remove the limitation or self-approve. Added a bounded clarification cycle:
+the same reviewer must independently distinguish unresolved evidence gaps (blocked)
+from resolved tooling issues (checks with the verified alternative). Original report,
+clarification intent and task identity remain durable. Explicit `resume-code-review`
+requires authoritative last-turn completion, fresh authorization and fenced reclaim;
+it preserves original task identities, pending operations and the six-hour deadline.
+
+Meaningful clarification/reclaim red: 22 passed, 4 failed; affected regression green:
+50 passed (`005-clarification-green.txt`). Final `npm run check` exited 0 with **188
+passing tests**: 48 unit, 136 integration, 4 CLI E2E, plus strict TypeScript compilation
+(`005-final-check.txt`). Shared command evidence and turn waiting were extracted without
+changing their contracts; implementation/correction regressions remained green.
+
+The existing job resumed once and returned `e2e-review`, exit 0. The same independent
+reviewer task `01a0c134-c48e-7c43-8db7-064589335e8c` clarified in turn
+`01a0c140-4925-72d2-a5ca-746ba6325e86` and published
+[exact-head code sign-off](https://github.com/talaniz/prime-mover-fixture/pull/9#issuecomment-5753674091)
+on `e551f21f408e05d351aca388ca07a8908c5d8772`, base
+`eee4090de3540b66a25e2ee9195ada3bbec68f00`, covering all three new commits. Both
+[findings](https://github.com/talaniz/prime-mover-fixture/pull/9#issuecomment-5753613857)
+have public [accepted contracts and triage](https://github.com/talaniz/prime-mover-fixture/pull/9#issuecomment-5753617010)
+and reviewer-confirmed resolutions. The reviewer independently verified regression
+coverage against the prior broken implementation and retained the tooling resolution
+in its checks. This is an attributed comment, not a formal GitHub approval.
+
+At 2026-09-21 00:02 UTC, final acceptance independently verified trimming, preserved
+internal spaces and rejection of empty/whitespace/non-string values in the isolated
+worktree; reviewer identity differs from the implementer, remote head/base match the
+report, no active turn/lease remains, and the job is `e2e-review`. A fresh GitHub read
+confirmed PR #9 is open and **draft**. Retained `005-live-review-retry.json` records
+initial failure separately from successful continuation. No replacement fixture,
+implementation or correction was launched to bypass the failure. No production
+service, merge or deployment occurred.
+
+Build 005 acceptance is complete. Its primary commit includes implementation, tests,
+operator documentation and this log; Builds 006–008 and independent milestone delivery
+reviews remain pending. General recovery of unknown side-effect intents remains Build
+007 scope; explicit continuation does not erase uncertain external actions.

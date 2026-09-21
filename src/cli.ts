@@ -1,3 +1,6 @@
+import { ReviewCoordinator } from "./review-coordinator.js";
+import { ReviewInputs } from "./review-input.js";
+import { PrComments } from "./pr-comments.js";
 import { randomUUID } from "node:crypto";
 import { Implementation } from "./implementation.js";
 import { Worktrees } from "./worktree.js";
@@ -27,6 +30,8 @@ const commands = [
   "metadata",
   "poll",
   "run-once",
+  "code-review",
+  "resume-code-review",
   "resume-publication",
   "reconcile-issue",
   "rerun",
@@ -140,11 +145,22 @@ if (!command || !commands.includes(command) || !configPath) {
         if (command === "cancel") store.cancel(id, why);
         else store.retryBlocked(id, why);
         output(publicJob(store.job(id)));
-      } else if (["run-once", "resume-publication"].includes(command)) {
+      } else if (
+        [
+          "run-once",
+          "resume-publication",
+          "code-review",
+          "resume-code-review",
+        ].includes(command)
+      ) {
         if (!config.gitAuthor)
           throw new Error(
             "Configure gitAuthor.name and gitAuthor.email before execution",
           );
+        if (command === "resume-code-review" && args.length < 2)
+          throw new Error("Job ID and explicit reason are required");
+        if (command === "code-review" && args.length !== 1)
+          throw new Error("Exactly one job ID is required for code review");
         if (command === "run-once" && args.length)
           throw new Error("Unexpected command arguments");
         if (command === "resume-publication" && args.length < 2)
@@ -164,7 +180,8 @@ if (!command || !commands.includes(command) || !configPath) {
         try {
           await app.connect();
           agent = new ExecutionAgent(store, app);
-          const intake = new Intake(store, new GitHubClient(), {
+          const github = new GitHubClient();
+          const intake = new Intake(store, github, {
             pollMs: config.pollSeconds * 1000,
             interrupt: async (threadId, turnId) => {
               await app.request("turn/interrupt", { threadId, turnId });
@@ -175,32 +192,77 @@ if (!command || !commands.includes(command) || !configPath) {
             undefined,
             config.gitAuthor,
           );
+          const pulls = new GitHubPulls();
+          const publication = new Publication(
+            store,
+            trees,
+            pulls,
+            undefined,
+            (id) => intake.authorize(id),
+          );
           const worker = new Implementation(
             store,
             config,
             intake,
             trees,
             agent,
-            new Publication(
-              store,
-              trees,
-              new GitHubPulls(),
-              undefined,
-              (id) => intake.authorize(id),
-            ),
+            publication,
           );
           const owner = `worker-${randomUUID()}`;
           const scheduler = new Scheduler(store, owner);
           let result: string;
-          if (command === "resume-publication") {
+          if (command === "code-review" || command === "resume-code-review") {
             const id = args[0]!;
-            await agent.proveCompleted(id);
+            let lease;
+            if (command === "resume-code-review") {
+              const last = store
+                .operations(id)
+                .filter((o) => o.kind === "turn-start")
+                .at(-1);
+              if (
+                !last ||
+                last.status !== "done" ||
+                !last.key.endsWith(":turn")
+              )
+                throw new Error("Review task requires reconciliation");
+              const proof = await agent.proveCompleted(
+                id,
+                last.key.slice(0, -":turn".length),
+              );
+              await intake.authorize(id, { allowOperationalBlock: true });
+              lease = store.reclaimCodeReview(
+                id,
+                owner,
+                30000,
+                args.slice(1).join(" "),
+                proof,
+              );
+            } else {
+              await intake.authorize(id);
+              lease = store.claimCodeReview(id, owner, 30000);
+            }
+            const review = new ReviewCoordinator(store, config, {
+              agent,
+              inputs: new ReviewInputs(trees, pulls),
+              comments: new PrComments(store, github, (id) =>
+                intake.authorize(id),
+              ),
+              publication,
+              intake,
+            });
+            result = await scheduler.runClaimed(lease, (context) =>
+              review.run(context),
+            );
+          } else if (command === "resume-publication") {
+            const id = args[0]!;
+            const proof = await agent.proveCompleted(id);
             await intake.authorize(id, { allowOperationalBlock: true });
             const lease = store.reclaimPublication(
               id,
               owner,
               30000,
               args.slice(1).join(" "),
+              proof,
             );
             result = await scheduler.runClaimed(lease, (context) =>
               worker.run(context),
@@ -208,7 +270,8 @@ if (!command || !commands.includes(command) || !configPath) {
           } else
             result = await scheduler.runOnce((context) => worker.run(context));
           output({ result });
-          if (!["idle", "pr-open"].includes(result)) process.exitCode = 1;
+          if (!["idle", "pr-open", "e2e-review"].includes(result))
+            process.exitCode = 1;
         } finally {
           agent?.close();
           app.close();

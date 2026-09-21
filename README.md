@@ -6,7 +6,7 @@ You set the objective. Prime Mover moves the pieces.
 
 ## Status
 
-Builds 001–004 implement integration contracts, durable scheduling, operator controls, project metadata, maintainer-authorized GitHub intake and supervised isolated implementation through a draft PR. The review pipeline and DOOM Projects page remain under development. No unattended worker is running; nothing merges automatically.
+Builds 001–005 implement integration contracts, durable scheduling, operator controls, project metadata, maintainer-authorized GitHub intake and supervised isolated implementation through a draft PR and independent code review with verified corrections. E2E coordination and DOOM Projects page remain under development. No unattended worker is running; nothing merges automatically.
 
 ## Intended workflow
 
@@ -39,7 +39,7 @@ The mount currently uses the existing desktop-managed path and has no `/etc/fsta
 
 ## Development and verification
 
-Build 001 establishes the TypeScript/Node toolchain, configuration contracts and compatibility probes. Build 002 adds the durable store/scheduler, operator controls and metadata service. Build 003 adds opt-in issue intake; Build 004 adds bounded implementation and verified draft publication. Independent reviews and full recovery remain future builds. Follow `AGENTS.md` and the user's global PR review workflow.
+Build 001 establishes the TypeScript/Node toolchain, configuration contracts and compatibility probes. Build 002 adds the durable store/scheduler, operator controls and metadata service. Build 003 adds opt-in issue intake; Build 004 adds bounded implementation and verified draft publication. Build 005 adds independent code review, public finding triage, bounded corrections and exact-head sign-off. E2E coordination and full recovery remain future builds. Follow `AGENTS.md` and the user's global PR review workflow.
 
 Current repository checks:
 
@@ -56,7 +56,7 @@ Credentials, environment-specific configuration, databases and their WAL/SHM sid
 Start with [harness/README.md](harness/README.md) for the eight ordered build contracts,
 test-first commit workflow, execution log, independent reviews, and release notes.
 The application milestone is in progress; Build 001 contracts and compatibility checks
-are complete. The durable store/scheduler, metadata backend and authorized intake are implemented through Build 004; the complete review pipeline and dashboard remain under development.
+are complete. The durable store/scheduler, metadata backend and authorized intake are implemented through Build 005; the complete review pipeline and dashboard remain under development.
 
 ## Planned default projects
 
@@ -219,3 +219,37 @@ later review acceptance. It refuses an existing evidence file:
 ```sh
 node scripts/rehearse-implementation.mjs /media/talaniz/postgresdata VERIFIED_UUID harness/build/implementation-evidence.json
 ```
+
+
+## Supervised code review (Build 005)
+
+Start independent code review for an already published job:
+
+```sh
+node dist/cli.js code-review config.local.json JOB_ID
+```
+
+The reviewer receives every new commit, combined diff, issue contracts and verification
+evidence. Findings and main-task dispositions are attributed in PR comments. Accepted
+corrections use the original implementation task and verification commands; the same
+independent reviewer revalidates the new head. Comments are not formal GitHub approvals.
+The stage completes at `e2e-review`; this does not mark the PR ready.
+
+If a completed review turn was blocked during coordination, explicitly continue after
+inspecting the blocker:
+
+```sh
+node dist/cli.js resume-code-review config.local.json JOB_ID "what was corrected"
+```
+
+Continuation requires authoritative completed-turn proof, fresh issue authorization,
+no live lease or competing reservation, and recognized persisted operations. Original
+task identities, intents and elapsed budgets are preserved. Unknown task/turn creation
+or external publication state cannot be cleared by this command. Unresolved reviewer
+limitations block sign-off; bounded clarification asks the reviewer to distinguish
+resolved tooling issues from remaining gaps without changing its verdict ourselves.
+
+The supervised live fixture gate is `scripts/rehearse-review.mjs MOUNT VERIFIED_UUID
+EVIDENCE_PATH`. It deliberately seeds a defect in a private fixture PR, verifies the
+finding/correction/sign-off cycle, and refuses existing evidence or open authorized
+fixtures. Inspect and reconcile failures before any new run.

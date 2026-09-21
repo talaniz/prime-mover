@@ -8,7 +8,13 @@ import { checkStorage, openRuntime } from "../dist/storage.js";
 import { ghTransport, GitHubClient } from "../dist/github.js";
 import { runIsolated } from "../dist/verification.js";
 import { git } from "../dist/worktree.js";
-const [mount, uuid, evidencePath] = process.argv.slice(2);
+const [mount, uuid, evidencePath, jobSeconds = "900"] = process.argv.slice(2);
+if (
+  !Number.isSafeInteger(Number(jobSeconds)) ||
+  Number(jobSeconds) < 900 ||
+  Number(jobSeconds) > 21600
+)
+  throw Error("Fixture job budget must be 900–21600 seconds");
 if (!mount || !uuid || !evidencePath)
   throw Error(
     "Usage: rehearse-implementation MOUNT VERIFIED_UUID EVIDENCE_PATH",
@@ -28,6 +34,14 @@ async function api(method, endpoint, body) {
 const repo = await api("GET", `repos/${repository}`);
 assert.equal(repo.private, true);
 assert.equal(repo.default_branch, "main");
+const activeFixtures = await api(
+  "GET",
+  `repos/${repository}/issues?state=open&labels=codex-ready&per_page=1`,
+);
+assert.ok(
+  Array.isArray(activeFixtures) && activeFixtures.length === 0,
+  "Retire prior fixture authorization before a new isolated rehearsal",
+);
 const config = JSON.parse(readFileSync("config.example.json"));
 config.storage = { mount, uuid, root: join(mount, "codex-work") };
 config.metadata.socket = join(
@@ -45,7 +59,7 @@ config.metadata.socket = join(root, "metadata.sock");
 config.metadata.tokenFile = join(root, "unused-token");
 config.pollSeconds = 1;
 config.limits.turnSeconds = 300;
-config.limits.jobSeconds = 900;
+config.limits.jobSeconds = Number(jobSeconds);
 config.projects = [
   {
     ...config.projects[0],
@@ -92,16 +106,14 @@ function command(name, ...args) {
     evidence.command = name;
     evidence.exitCode = result.status;
     evidence.jobs = state((s) =>
-      s
-        .jobs()
-        .map((j) => ({
-          id: j.id,
-          stage: j.stage,
-          blockCode: j.blockCode,
-          threadId: j.activeThreadId,
-          turnId: j.activeTurnId,
-          leaseHeld: !!j.leaseOwner,
-        })),
+      s.jobs().map((j) => ({
+        id: j.id,
+        stage: j.stage,
+        blockCode: j.blockCode,
+        threadId: j.activeThreadId,
+        turnId: j.activeTurnId,
+        leaseHeld: !!j.leaseOwner,
+      })),
     );
     save();
     console.log(JSON.stringify(evidence));

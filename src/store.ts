@@ -1,5 +1,6 @@
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { randomUUID } from "node:crypto";
+import { Reviews } from "./reviews.js";
 import type { ProjectConfig } from "./config.js";
 import type { JobStage } from "./contracts.js";
 
@@ -67,7 +68,7 @@ const next: Partial<Record<JobStage, JobStage[]>> = {
   queued: ["preparing"],
   preparing: ["implementing"],
   implementing: ["verifying"],
-  verifying: ["implementing", "pr-open"],
+  verifying: ["implementing", "pr-open", "code-review"],
   "pr-open": ["code-review"],
   "code-review": ["code-fixes", "e2e-review"],
   "code-fixes": ["verifying", "code-review"],
@@ -626,6 +627,23 @@ export class Store {
           !["waiting", "blocked", "cancelled"].includes(stage))
       )
         throw new Error("Invalid job transition");
+      if (
+        stage === "code-review" &&
+        j.stage === "verifying" &&
+        j.prNumber === null
+      )
+        throw new Error("Correction review requires an existing PR");
+      if (stage === "e2e-review") {
+        if (j.activeTurnId || this.hasPending(j.id))
+          throw new Error(
+            "Active review or pending work requires reconciliation",
+          );
+        const reviews = new Reviews(this);
+        const target = reviews.current(j.id);
+        if (!target)
+          throw new Error("Current-head code-review sign-off is required");
+        reviews.requireCodeSignoff(j.id, target);
+      }
       if (j.activeTurnId && (terminal.has(stage) || stage === "ready"))
         throw new Error("Cannot finish job with an active turn");
       if (
@@ -717,6 +735,7 @@ export class Store {
     owner: string,
     duration: number,
     why: string,
+    proof?: { threadId: string; turnId: string },
   ): Lease {
     reason(why);
     required(owner);
@@ -726,12 +745,21 @@ export class Store {
       const j = this.job(id);
       const ops = this.operations(id);
       const turn = ops.find((o) => o.key === "implementation-0:turn");
+      const verifiedReservation = Boolean(
+        j &&
+          proof &&
+          turn?.status === "done" &&
+          proof.threadId === j.activeThreadId &&
+          proof.turnId === (turn.result as { turnId: string }).turnId &&
+          (!j.activeTurnId || j.activeTurnId === proof.turnId) &&
+          (!j.leaseOwner ||
+            (j.leaseUntil !== null && j.leaseUntil <= this.now())),
+      );
       if (
         !j ||
         j.stage !== "blocked" ||
         j.cancelRequested ||
-        j.activeTurnId ||
-        j.leaseOwner ||
+        ((j.activeTurnId || j.leaseOwner) && !verifiedReservation) ||
         !j.activeThreadId ||
         turn?.status !== "done" ||
         this.one("SELECT intake_invalid FROM jobs WHERE id=?", id)
@@ -748,7 +776,8 @@ export class Store {
         throw new Error("Pending execution requires remote reconciliation");
       if (
         this.one(
-          "SELECT id FROM jobs WHERE lease_owner IS NOT NULL OR active_turn_id IS NOT NULL",
+          "SELECT id FROM jobs WHERE id<>? AND (lease_owner IS NOT NULL OR active_turn_id IS NOT NULL)",
+          id,
         ) ||
         this.one(
           "SELECT job_id FROM operations WHERE status='pending' AND job_id<>?",
@@ -764,7 +793,7 @@ export class Store {
       const epoch = j.leaseEpoch + 1,
         attempt = j.attempts + 1;
       this.run(
-        "UPDATE jobs SET stage='preparing',block_code=NULL,lease_owner=?,lease_epoch=?,lease_until=?,attempts=?,updated_at=? WHERE id=?",
+        "UPDATE jobs SET stage='preparing',block_code=NULL,active_turn_id=NULL,lease_owner=?,lease_epoch=?,lease_until=?,attempts=?,updated_at=? WHERE id=?",
         owner,
         epoch,
         this.now() + duration,
@@ -782,10 +811,189 @@ export class Store {
       );
       this.event(id, "operator-publication-resume", {
         reason: why,
+        reconciledTurn: verifiedReservation ? proof!.turnId : null,
         owner,
         epoch,
       });
       return { jobId: id, owner, epoch };
+    });
+  }
+  reclaimCodeReview(
+    id: string,
+    owner: string,
+    duration: number,
+    why: string,
+    proof: { threadId: string; turnId: string },
+  ): Lease {
+    reason(why);
+    required(owner);
+    if (!Number.isSafeInteger(duration) || duration < 1)
+      throw new Error("Invalid review lease");
+    return this.transaction(() => {
+      const job = this.job(id),
+        ops = this.operations(id),
+        last = ops.filter((o) => o.kind === "turn-start").at(-1);
+      if (
+        !job ||
+        job.stage !== "blocked" ||
+        job.prNumber === null ||
+        job.cancelRequested ||
+        !proof ||
+        last?.status !== "done" ||
+        (last.input as { threadId: string }).threadId !== proof.threadId ||
+        (last.result as { turnId: string }).turnId !== proof.turnId ||
+        job.activeThreadId !== proof.threadId ||
+        (job.activeTurnId && job.activeTurnId !== proof.turnId) ||
+        (job.leaseOwner &&
+          (job.leaseUntil === null || job.leaseUntil > this.now())) ||
+        this.one("SELECT intake_invalid FROM jobs WHERE id=?", id)
+          ?.intake_invalid
+      )
+        throw new Error(
+          "Exact completed review-task proof and reconciliation are required",
+        );
+      const allowed = [
+        "code-review-round",
+        "review-cycle",
+        "coordinator-task",
+        "review-triage",
+        "review-fix",
+        "pr-comment",
+        "commit",
+        "push",
+        "pull-create",
+        "verification",
+      ];
+      if (ops.some((o) => o.status === "pending" && !allowed.includes(o.kind)))
+        throw new Error("Pending task creation requires reconciliation");
+      if (
+        this.paused() ||
+        this.one(
+          "SELECT id FROM jobs WHERE id<>? AND (lease_owner IS NOT NULL OR active_turn_id IS NOT NULL)",
+          id,
+        ) ||
+        this.one(
+          "SELECT job_id FROM operations WHERE job_id<>? AND status='pending'",
+          id,
+        ) ||
+        this.one("SELECT job_id FROM outbox WHERE status='pending'")
+      )
+        throw new Error("Another reservation requires reconciliation");
+      const project = this.one(
+        "SELECT * FROM projects WHERE id=?",
+        job.projectId,
+      );
+      if (!project?.enabled || !project.configured || project.block_code)
+        throw new Error("Review project is unavailable");
+      const epoch = job.leaseEpoch + 1,
+        attempt = job.attempts + 1;
+      this.run(
+        "UPDATE jobs SET stage='code-review',block_code=NULL,active_turn_id=NULL,lease_owner=?,lease_epoch=?,lease_until=?,attempts=?,updated_at=? WHERE id=?",
+        owner,
+        epoch,
+        this.now() + duration,
+        attempt,
+        this.now(),
+        id,
+      );
+      this.run(
+        "INSERT INTO attempts VALUES (?,?,?,?,?)",
+        id,
+        attempt,
+        owner,
+        epoch,
+        this.now(),
+      );
+      this.event(id, "operator-review-resume", {
+        reason: why,
+        owner,
+        epoch,
+        proof,
+      });
+      return { jobId: id, owner, epoch };
+    });
+  }
+  claimCodeReview(id: string, owner: string, duration: number): Lease {
+    required(owner);
+    if (!Number.isSafeInteger(duration) || duration < 1)
+      throw new Error("Invalid review claim duration");
+    return this.transaction(() => {
+      const job = this.job(id);
+      if (
+        !job ||
+        job.stage !== "pr-open" ||
+        job.prNumber === null ||
+        job.cancelRequested ||
+        this.one("SELECT intake_invalid FROM jobs WHERE id=?", id)
+          ?.intake_invalid
+      )
+        throw new Error(
+          "Review claim requires a published authorized implementation",
+        );
+      if (
+        this.paused() ||
+        this.one(
+          "SELECT id FROM jobs WHERE lease_owner IS NOT NULL OR active_turn_id IS NOT NULL",
+        ) ||
+        this.hasPending()
+      )
+        throw new Error(
+          "Review claim blocked by pause or outstanding reservation",
+        );
+      const project = this.one(
+        "SELECT * FROM projects WHERE id=?",
+        job.projectId,
+      );
+      if (!project?.enabled || !project.configured || project.block_code)
+        throw new Error("Review claim project is unavailable");
+      const epoch = job.leaseEpoch + 1,
+        attempt = job.attempts + 1;
+      this.run(
+        "UPDATE jobs SET stage='code-review',block_code=NULL,lease_owner=?,lease_epoch=?,lease_until=?,attempts=?,updated_at=? WHERE id=?",
+        owner,
+        epoch,
+        this.now() + duration,
+        attempt,
+        this.now(),
+        id,
+      );
+      this.run(
+        "INSERT INTO attempts VALUES (?,?,?,?,?)",
+        id,
+        attempt,
+        owner,
+        epoch,
+        this.now(),
+      );
+      this.event(id, "code-review-claimed", { owner, epoch });
+      return { jobId: id, owner, epoch };
+    });
+  }
+  finishCodeReview(lease: Lease): void {
+    this.transaction(() => {
+      const job = this.assertWorker(lease);
+      if (
+        job.stage !== "code-review" ||
+        job.activeTurnId ||
+        this.hasPending(job.id)
+      )
+        throw new Error(
+          "Active review or pending work requires reconciliation",
+        );
+      const reviews = new Reviews(this),
+        target = reviews.current(job.id);
+      if (!target)
+        throw new Error("Current-head code-review sign-off is required");
+      reviews.requireCodeSignoff(job.id, target);
+      this.run(
+        "UPDATE jobs SET stage='e2e-review',lease_owner=NULL,lease_until=NULL,updated_at=? WHERE id=?",
+        this.now(),
+        job.id,
+      );
+      this.event(job.id, "code-review-completed", {
+        head: target.head,
+        base: target.base,
+      });
     });
   }
   finishImplementation(lease: Lease, number: number): void {
@@ -939,7 +1147,7 @@ export class Store {
   }
   operations(id: string): Operation[] {
     return this.all(
-      "SELECT * FROM operations WHERE job_id=? ORDER BY created_at,key",
+      "SELECT * FROM operations WHERE job_id=? ORDER BY rowid",
       id,
     ).map((r) => ({
       key: String(r.key),

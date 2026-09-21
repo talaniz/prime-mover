@@ -206,3 +206,28 @@ The completed implementation releases its lease at pr-open, not ready-for-human.
 Operator publication continuation requires authoritative completed-task proof and a
 fresh authorization guard before reacquiring a fenced lease; it preserves budgets
 and unresolved intents. Generic recovery and unattended operation remain Build 007.
+
+
+## Independent code review (Build 005)
+
+`ReviewInputs` collects ordered commits and the aggregate diff from the owned worktree,
+validating the open PR's exact head/base/branch before and after collection. Oversized
+input blocks rather than silently truncating review coverage. `CodeReviewRound` owns
+structured reviewer output, distinct task identity, original deadlines and attributed
+publication. `Reviews` stores immutable head bindings, reports, dispositions and
+persistent correction charges; a changed head/base invalidates prior sign-off even if
+a former SHA returns later.
+
+`ReviewCoordinator` assesses each finding on the original implementation task, publishes
+accepted contracts or rejection/deferral reasons, then verifies scoped corrections and
+obtains revalidation from the same independent reviewer. A blocking disagreement or
+unavailable evidence remains visible. `PrComments` reconciles random marker, exact body
+and authenticated author before considering a send complete; ambiguous absence never
+repeats a POST. Read-only task observations have bounded retries; side-effect sends do
+not. Explicit continuation proves the last recorded turn completed before reclaiming
+a blocked job, retaining original identities, operations and elapsed budgets.
+
+Sign-off with nonempty limitations cannot enter E2E. A bounded clarification turn may
+ask the same reviewer to correct inconsistent report semantics; it cannot delete gaps
+or substitute a coordinator-authored verdict. The original report and clarification
+intent remain durable. E2E execution and full operational recovery are subsequent gates.

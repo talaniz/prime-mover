@@ -355,4 +355,171 @@ test("explicit publication recovery reclaims only a completed implementation wit
     "pending",
   );
 });
-test('publication continuation proof rejects active, failed and mismatched tasks without starting work',async t=>{const f=fixture(t);const a=f.agent();const run=await a.start(f.context,f.input);await assert.rejects(a.proveCompleted(f.id),/not-completed/);f.finish('failed');await a.observe(f.context,run);await assert.rejects(a.proveCompleted(f.id),/not-completed/);assert.equal(f.calls.filter(c=>c.method==='turn/start').length,1);assert.throws(()=>f.store.reclaimPublication(f.id,'new',10000,'try while owned'),/reconciliation/);});
+test("publication continuation proof rejects active, failed and mismatched tasks without starting work", async (t) => {
+  const f = fixture(t);
+  const a = f.agent();
+  const run = await a.start(f.context, f.input);
+  await assert.rejects(a.proveCompleted(f.id), /not-completed/);
+  f.finish("failed");
+  await a.observe(f.context, run);
+  await assert.rejects(a.proveCompleted(f.id), /not-completed/);
+  assert.equal(f.calls.filter((c) => c.method === "turn/start").length, 1);
+  assert.throws(
+    () => f.store.reclaimPublication(f.id, "new", 10000, "try while owned"),
+    /reconciliation/,
+  );
+});
+
+test("review tasks get independent-review instructions and persist structured-output contract", async (t) => {
+  const f = fixture(t),
+    agent = f.agent(),
+    schema = {
+      type: "object",
+      properties: { verdict: { type: "string" } },
+      required: ["verdict"],
+      additionalProperties: false,
+    };
+  const input = {
+    ...f.input,
+    key: "code-review-1",
+    role: "code-review",
+    outputSchema: schema,
+  };
+  await agent.start(f.context, input);
+  assert.match(
+    f.calls.find((c) => c.method === "thread/start").params
+      .developerInstructions,
+    /independent.*review/i,
+  );
+  assert.deepEqual(
+    f.calls.find((c) => c.method === "turn/start").params.outputSchema,
+    schema,
+  );
+  assert.equal(
+    f.store.operations(f.id).find((o) => o.key === "code-review-1:thread").input
+      .role,
+    "code-review",
+  );
+  await assert.rejects(
+    agent.start(f.context, { ...input, role: "implementation" }),
+    /role|contract/i,
+  );
+});
+test("review result requires terminal ownership proof and returns final output without commentary", async (t) => {
+  const f = fixture(t),
+    agent = f.agent(),
+    run = await agent.start(f.context, f.input);
+  await assert.rejects(agent.result(f.context, run), /complete|result/i);
+  f.finish();
+  const original = f.rpc.request;
+  f.rpc.request = async (method, params) => {
+    const reply = await original(method, params);
+    if (method === "thread/turns/list")
+      reply.data[0].items = [
+        { type: "agentMessage", phase: "commentary", text: "still working" },
+        {
+          type: "agentMessage",
+          phase: "final_answer",
+          text: '{"verdict":"sign-off"}',
+        },
+      ];
+    return reply;
+  };
+  assert.equal(await agent.result(f.context, run), '{"verdict":"sign-off"}');
+});
+test("completed task without an actual final report cannot supply review evidence", async (t) => {
+  const f = fixture(t),
+    agent = f.agent(),
+    run = await agent.start(f.context, f.input);
+  f.finish();
+  await assert.rejects(agent.result(f.context, run), /result|report/i);
+});
+
+test("review follow-up reuses the original independent task with a fresh correlated turn", async (t) => {
+  const f = fixture(t),
+    a = f.agent(),
+    input = { ...f.input, key: "code-review-1", role: "code-review" };
+  const first = await a.start(f.context, input);
+  f.finish();
+  await a.observe(f.context, first);
+  a.reuseTask(f.context, "code-review-1", "code-review-2", "code-review");
+  const next = await a.start(f.context, {
+    ...input,
+    key: "code-review-2",
+    prompt: "Re-review the fixes and all commits.",
+  });
+  assert.equal(next.threadId, first.threadId);
+  assert.equal(f.calls.filter((c) => c.method === "thread/start").length, 1);
+  assert.equal(f.calls.filter((c) => c.method === "turn/start").length, 2);
+  assert.throws(
+    () =>
+      a.reuseTask(
+        f.context,
+        "code-review-1",
+        "implementation-fix-1",
+        "implementation",
+      ),
+    /role|active/i,
+  );
+});
+test("a different turn cannot be started while an owned turn is still reserved", async (t) => {
+  const f = fixture(t),
+    a = f.agent();
+  await a.start(f.context, f.input);
+  await assert.rejects(
+    a.start(f.context, {
+      ...f.input,
+      key: "code-review-1",
+      role: "code-review",
+    }),
+    /active|reserved/i,
+  );
+  assert.equal(f.calls.filter((c) => c.method === "turn/start").length, 1);
+});
+
+test("verified remote completion permits publication continuation after a stale owned lease", async (t) => {
+  const f = fixture(t),
+    a = f.agent(),
+    run = await a.start(f.context, f.input);
+  f.store.transition(f.context.lease, "blocked", "implementation-error");
+  f.finish();
+  f.advance(100001);
+  const proof = await a.proveCompleted(f.id);
+  assert.throws(
+    () =>
+      f.store.reclaimPublication(
+        f.id,
+        "recovered",
+        10000,
+        "completed remote task",
+      ),
+    /reconcil/i,
+  );
+  const lease = f.store.reclaimPublication(
+    f.id,
+    "recovered",
+    10000,
+    "verified completed owned task after stale coordinator lease",
+    proof,
+  );
+  assert.equal(lease.epoch, f.context.lease.epoch + 1);
+  assert.equal(f.store.job(f.id).activeTurnId, null);
+  assert.equal(f.store.job(f.id).activeThreadId, run.threadId);
+  assert.equal(f.calls.filter((c) => c.method === "turn/start").length, 1);
+});
+test("transient observation read failure retries only the read, never task or turn creation", async (t) => {
+  const f = fixture(t),
+    a = f.agent(),
+    run = await a.start(f.context, f.input),
+    request = f.rpc.request;
+  let reads = 0;
+  f.rpc.request = async (method, params) => {
+    if (method === "thread/read" && ++reads === 1)
+      throw Error("transient unavailable read");
+    return request(method, params);
+  };
+  assert.equal(await a.observe(f.context, run), "active");
+  assert.equal(reads, 2);
+  assert.equal(f.calls.filter((c) => c.method === "thread/start").length, 1);
+  assert.equal(f.calls.filter((c) => c.method === "turn/start").length, 1);
+});
