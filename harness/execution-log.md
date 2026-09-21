@@ -1778,3 +1778,9 @@ Corrected verification passed 42 intake scenarios and exact preservation of all
 24 submitted answers, including bug reproduction and documentation paths.
 Independent review finding ISSUE-FORMS-1 on PR #4 confirmed this boundary; the
 forms-only correction addresses it without changing runtime behavior.
+
+### Issue-template review completion and release notes
+
+Independent code review signed off on `82603c7a8c3ad84fa4cb77dff9e0a4a33b30c64f`: [report](https://github.com/talaniz/prime-mover/pull/4#issuecomment-5762473256). Independent documentation workflow E2E then signed off on that same head: [report](https://github.com/talaniz/prime-mover/pull/4#issuecomment-5762515822). The latter passed 54 actual policy decisions and exact preservation of 24 full answers across both projects, with no findings. Implementation CI passed.
+
+Added `harness/release-notes/issue-templates.md` after both reviews, derived from this log and the linked reports. Native GitHub UI remains a post-merge check; no live issues, execution jobs, merge or deployment occurred. Both reviewers must revalidate this notes-only final head; authoritative final sign-offs and CI remain on PR #4.
