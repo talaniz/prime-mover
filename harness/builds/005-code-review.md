@@ -2,7 +2,7 @@
 
 Milestone: **Minimum Viable Application** (the only milestone).
 Dependency: 004.
-Status: **pending**; committing this contract does not execute it.
+Status: **complete**; live seeded-defect correction and exact-head independent sign-off verified. See the execution log for evidence.
 Primary implementation commit trailer: `Build: 005`.
 
 ## Scope and deliverables

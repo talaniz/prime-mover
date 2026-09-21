@@ -1,6 +1,7 @@
 # MVA project defaults and metadata view
 
-Status: planned; no runtime configuration, tracking or UI is implemented by this document.
+Status: registry defaults and the read-only metadata backend are implemented through Build 002.
+Issue tracking/execution and recovery are implemented through Build 007. The DOOM Projects UI and actual-service browser integration are implemented in linked DOOM PR #14; independent product reviews and paired-head integration passed. Final documentation-head review records and delivery status live on the linked PRs; no unattended service is activated.
 This extends the sole Minimum Viable Application milestone, not a later milestone.
 
 ## Default project registry

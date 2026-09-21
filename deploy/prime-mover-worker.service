@@ -1,0 +1,25 @@
+[Unit]
+Description=Prime Mover supervised workflow worker
+RequiresMountsFor=/media/talaniz/postgresdata/codex-work
+ConditionPathIsMountPoint=/media/talaniz/postgresdata
+StartLimitIntervalSec=600
+StartLimitBurst=3
+
+[Service]
+Type=simple
+WorkingDirectory=/home/palpatine/prime-mover
+Environment=PATH=/home/palpatine/.local/opt/node-v22.23.2-linux-arm64/bin:/home/palpatine/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStartPre=/home/palpatine/.local/opt/node-v22.23.2-linux-arm64/bin/node /home/palpatine/prime-mover/dist/cli.js service-preflight /home/palpatine/.config/prime-mover/config.json
+ExecStart=/home/palpatine/.local/opt/node-v22.23.2-linux-arm64/bin/node /home/palpatine/prime-mover/scripts/worker-service.mjs /home/palpatine/.config/prime-mover/config.json
+Restart=on-failure
+RestartSec=30
+TimeoutStopSec=60
+KillMode=mixed
+UMask=0077
+MemoryHigh=512M
+MemoryMax=1G
+TasksMax=256
+CPUQuota=100%
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,26 @@
+{
+  "name": "prime-mover",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.23.2 <23"
+  },
+  "packageManager": "npm@10.9.8",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test test/unit/*.test.mjs",
+    "test:integration": "npm run build && node --test test/integration/*.test.mjs",
+    "test:e2e": "npm run build && node --test test/e2e/*.test.mjs",
+    "check": "npm run lint && npm test && npm run test:integration && npm run test:e2e"
+  },
+  "dependencies": {
+    "ws": "8.21.3"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.4",
+    "@types/ws": "8.18.1",
+    "typescript": "5.9.3"
+  }
+}
