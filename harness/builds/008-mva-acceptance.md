@@ -2,8 +2,9 @@
 
 Milestone: **Minimum Viable Application** (the only milestone).
 Dependency: 007.
-Status: **implemented and locally verified**; publication CI and independent product
-reviews/release-note/final-head gates remain pending. See the execution log and
+Status: **implemented and verified**; implementation CI and independent product
+reviews passed. Release notes are recorded; final documentation-head sign-offs and
+delivery status are authoritative on the product PRs. See the execution log and
 [acceptance index](../../docs/mva-acceptance.md) for actual evidence.
 Primary implementation commit trailer: `Build: 008`.
 

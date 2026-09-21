@@ -4,10 +4,15 @@
 
 This is the source of truth for actual execution and release-note generation, backed
 by Git and linked verification/review evidence. Plans are not accomplishments.
-Application milestone: **Minimum Viable Application**. Status: **in progress**.
-Builds 001–002: **complete** (contracts, durable scheduler/store, operator controls and metadata).
-Builds 003–008: **pending**. Intake, implementation/review coordination and notification
-delivery are not implemented or activated yet. See the Build 001 evidence below.
+Application milestone: **Minimum Viable Application**. Builds 001–008 are implemented
+and verified. Independent product code and E2E reviews passed at Prime Mover
+`de3c39f6bf8597ad7a468a49f44b5af7ad23e7f7` and DOOM
+`4aacb601a8e158aa9310b8c62fd8a2c0464f70e7`, including paired-head integration.
+Release notes are now recorded; final documentation-head revalidation and CI are the
+remaining delivery gates, with authoritative final results on the product PRs.
+Production activation, persistent boot mount and enforced memory limits remain
+owner-gated. See the final review/release entry below and
+[release notes](release-notes/mva.md). Historical entries retain their original status.
 
 ## Entry contract
 
@@ -1615,3 +1620,109 @@ screenshots, then signed the same DOOM head:
 https://github.com/talaniz/doom-control/pull/14#issuecomment-5754967872.
 Its tested PM head was `f0619de`; changed PM metadata requires affected paired-head
 integration and review revalidation before final MVA readiness.
+
+
+## MVA independent product review completion and release notes
+
+Reviewed implementation: `de3c39f6bf8597ad7a468a49f44b5af7ad23e7f7` on
+[Prime Mover PR #3](https://github.com/talaniz/prime-mover/pull/3).
+Code reviewer `/root/pm_code_review` revalidated all four accepted findings and
+posted [SIGN-OFF](https://github.com/talaniz/prime-mover/pull/3#issuecomment-5755058371).
+Its fresh clone passed strict TypeScript and **291 tests** (77 unit, 205 integration,
+9 CLI E2E); [exact-head CI passed](https://github.com/talaniz/prime-mover/actions/runs/35558077103).
+Separate reviewer `/root/pm_e2e_review` received the checked-in role instructions
+verbatim as the named-role fallback, verified code sign-off first, and posted
+[product E2E SIGN-OFF](https://github.com/talaniz/prime-mover/pull/3#issuecomment-5755177041).
+No blocking finding remains on this implementation head.
+
+### Independent actual workflow evidence
+
+The reviewer used the real Pi, Node 22.23.2/npm 10.9.8, Codex 0.155.1 app server,
+GitHub and verified external ext4 volume. Its fresh fixture issue #12 produced
+[draft PR #13](https://github.com/talaniz/prime-mover-fixture/pull/13), job
+`0d69d8a3-d019-4a03-b293-37d4b2250c89`. Active implementation ownership made competing
+recovery return busy and intake refuse execution. The deliberate whitespace defect
+and weakened tests produced [two independent findings](https://github.com/talaniz/prime-mover-fixture/pull/13#issuecomment-5755094989),
+[accepted contracts](https://github.com/talaniz/prime-mover-fixture/pull/13#issuecomment-5755098185),
+[verified correction](https://github.com/talaniz/prime-mover-fixture/pull/13#issuecomment-5755104375),
+and [same-reviewer sign-off](https://github.com/talaniz/prime-mover-fixture/pull/13#issuecomment-5755112152)
+at `1941cb09c05c45bffbdb654d9b4fe7cee1bb8bda`, base
+`eee4090de3540b66a25e2ee9195ada3bbec68f00`.
+
+Implementer task `01a0c20d-e096-7fc2-91c4-894e9a524458`, code reviewer task
+`01a0c20f-83d5-7b43-93c9-e6c317a797e1`, and E2E reviewer task
+`01a0c213-1100-7622-95b4-ad522c7cedb0` are distinct. The latter exercised actual
+normal/trimmed/internal-whitespace inputs, invalid-input rejection and regression
+sensitivity, then [signed the same head](https://github.com/talaniz/prime-mover-fixture/pull/13#issuecomment-5755123183).
+
+The first readiness attempt safely blocked with `readiness-check-failed` and no
+notification. Later diagnostics found valid evidence; the generic blocker did not
+retain the original exception cause. No assumed GitHub transient is claimed.
+Documented continuation recovered with the same six turn IDs and original deadline.
+The observation-only final acceptance passed role independence, direct valid/invalid
+behavior, exact remote head/base and [one notification](https://github.com/talaniz/prime-mover-fixture/pull/13#issuecomment-5755138367).
+A deliberately failing GitHub status revoked readiness; restored success plus
+reconciliation returned ready with **zero new turns**, unchanged deadline
+`1789983680443` and the same notification. No reproducible product defect remained.
+The initial failure and successful recovery are both preserved in the review report.
+
+A separate independent crash fixture issue #14/job
+`2be84b81-443e-45ec-b58b-ea6b77f30dd9` killed its actual worker with SIGKILL after
+acceptance. Recovery advanced lease epoch **1→2**, preserving task
+`01a0c219-3ecb-7bc3-b8c2-d39742d7cffb`, turn
+`01a0c219-3f96-7c73-b801-dac84dec4a27`, task/turn intents and execution-budget record.
+It verified the original output and published [draft PR #15](https://github.com/talaniz/prime-mover-fixture/pull/15)
+at `98c977dcfcd8ceddcfbea1dcd62439b3fac0e7b9`. This is crash-recovery evidence only;
+PR #15 did not run its own review/readiness stages. An earlier harness invocation
+refused a still-visible prior authorization before creating any runtime/issue; the
+reviewer checked the exact endpoint empty and absence of new work before retrying
+with a new receipt. This failure remains recorded.
+
+Actual operator rehearsal passed doctor/no execution-state creation, persistent
+pause/resume, cancel, blocked retry, redacted inspect, authenticated private Unix
+metadata/two defaults and wrong-volume refusal. During active work, SQLite backup
+captured schema 2 (1 job, 11 operations, 35 events), SHA-256
+`301a47f9415e1a9f00256689ab15b3083a2b81bd670cbe1b2289adf9c29a06ac`.
+The isolated restore was paused, with independently identical jobs/operations.
+Overwrite refusal exited 1 and preserved the existing snapshot hash. Actual
+service-preflight rejected the missing memory controller; it did not certify
+unenforced caps. No production environment, boot settings or shared daemon changed.
+
+Owned fixture issues #10, #12 and #14 were subsequently deauthorized and their jobs
+cancelled. PRs #11/#13/#15 and evidence remain draft/unmerged and historical. Earlier
+receipts report their observed readiness at the time, not current authorization.
+Raw/private receipts remain under ignored `harness/build/e2e-review-*`; decisive
+redacted results and remote identities are durably recorded in the product E2E report.
+
+### Dashboard and paired-head closure
+
+DOOM remains at `4aacb601a8e158aa9310b8c62fd8a2c0464f70e7`, with 28 passing tests,
+14 inspected desktop/mobile screenshots, separate code/E2E sign-offs linked above.
+[Current paired-head E2E sign-off](https://github.com/talaniz/doom-control/pull/14#issuecomment-5755074318)
+adds actual PM CLI→authenticated DOOM→Chromium proof at PM `de3c39f` and DOOM
+`4aacb60`, including released `pr-open` visibility after metadata SIGKILL/restart.
+The unchanged execution-state digest was
+`bee2d1ee504249f2e869e3ec092f9e03bd5a71d2e3b77239b0b904e7f92b03c3`.
+Both default identities, same-number repository isolation, global contention,
+paused/queued/outcome/blocker state, auth/method/unknown-ID denial and stale source
+behavior with usable tasks passed. No deployed DOOM files changed.
+
+### Release-note action and final gate
+
+After both independent implementation reviews passed and the main task confirmed
+no unresolved blockers, generated `harness/release-notes/mva.md` from this log and
+verified PR evidence. Updated stale aggregate status summaries and the acceptance
+index; historical build/failure entries and original receipts remain intact.
+This separate commit changes documentation only, with no new primary Build trailer.
+Structural checks passed for all 24 Markdown files' local links, reviewer TOML
+parsing, eight unique primary Build trailers, diff whitespace, credential patterns
+and the eight documentation-only changed files. No artificial
+failing application test or unrelated local application rerun is required.
+
+Both PM reviewers must now revalidate the final documentation SHA on PR #3, and
+DOOM's independent reviewer must assess the final paired-head documentation delta.
+Final CI and exact-head sign-offs are recorded on the PRs before draft removal;
+this avoids recursive sign-off-only commits. Those PR records are authoritative
+for final delivery status. Owner approval remains required for merge/deployment.
+Persistent boot mounting, kernel memory-controller enablement/reboot and actual
+memory-limit enforcement remain unperformed deployment prerequisites.

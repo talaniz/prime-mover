@@ -2,9 +2,10 @@
 
 One milestone: **Minimum Viable Application (MVA)**. One application implementation
 branch and PR hold all build commits and subsequent review fixes/release notes.
-Builds 001–008 are implemented and locally verified. CI publication, independent
-product reviews, release notes and final-head revalidation remain delivery gates.
-The execution log contains actual evidence and remaining gates.
+Builds 001–008 are implemented and verified. Implementation CI and independent
+product code/E2E reviews passed; [MVA release notes](release-notes/mva.md) record
+the evidence. Final documentation-head revalidations and delivery status live on
+the product PRs. The execution log distinguishes delivery from deployment gates.
 
 ## Layout
 
@@ -66,4 +67,4 @@ The MVA tracks **Prime Mover** (`talaniz/prime-mover`) and **DOOM Dashboard**
 [the project metadata contract](project-metadata.md) for registry defaults, the
 read-only Projects page in the existing DOOM Dashboard, build ownership and
 cross-repository delivery. The default registry/metadata backend is implemented through Build 002. The DOOM page and actual-service browser acceptance are implemented in linked PR #14;
-final reviews remain pending and no unattended service is activated.
+independent implementation reviews passed and no unattended service is activated.
