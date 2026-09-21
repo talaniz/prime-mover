@@ -1739,3 +1739,48 @@ sign-offs; PM was returned to draft for this two-file documentation correction.
 No executable changes or application reruns are needed. Final reviewers must
 revalidate the new documentation SHA; the PR records remain authoritative. Diff
 whitespace and local documentation-link checks pass.
+
+
+## Issue templates — documentation workflow change
+
+Scope: add feature, bug report, and documentation GitHub issue forms, preserve the
+existing generic template, and document reporting/authorization. This is a separate
+post-MVA documentation change, not another Build 001–008 implementation commit.
+
+Acceptance criteria: each repository gains feature, bug, and documentation forms with distinct names, useful category-specific prompts, existing category labels, and exactly one required Objective/Scope/Acceptance criteria/Verification textarea. No form applies codex-ready, assigns execution, or supplies nonempty answers by default. Existing generic PM template and blank-issue behavior remain available. Runtime/deployment files stay unchanged.
+Verification contract: parse all six forms against documented GitHub keys/types/unique IDs; check category labels against live repositories; fill representative submissions for all six, render documented heading-based Markdown and exercise the unchanged actual Prime Mover intake policy. Completed contracts are runnable only with an allowlisted maintainer label event; omit each required section, omit authorization, or use an unauthorized actor and confirm refusal. Check diff whitespace and local documentation links. Independent code then documentation-workflow E2E review on both PRs. Native GitHub chooser/required-field UI activation requires merging into main and is not claimed exercised before merge. DOOM application UI screenshots are not applicable.
+
+No executable behavior changes; structural and filled-form scenarios replace
+artificial red/green application tests. Results and independent review links follow
+in the PR and the post-review release-note entry. No merge/deployment is performed.
+
+Implementation verification passed: PyYAML parsed all six forms; documented keys,
+unique IDs/labels, required contract fields, empty answer defaults, existing category
+labels, local reporting links and whitespace passed. Forty-two representative
+submission scenarios passed through the unchanged actual intake policy (six valid
+contracts, four missing-section cases per form, absent authorization, unauthorized
+actor). No GitHub issues or execution jobs were created. Native GitHub UI validation
+remains a post-merge observation, not claimed here. Independent reviews follow.
+
+### Intake context preservation correction
+
+Main-task boundary inspection found that implementation and review prompts receive
+only the four extracted contract fields. The first forms placed bug reproduction
+and documentation locations under additional headings, so runnable=true alone did
+not prove all reporter context reached the worker. Acceptance now also requires
+every submitted textarea answer to survive in the actual extracted contract.
+Folded all type-specific prompts into the four required textareas; no parser or
+runtime behavior changed. Bug expected/actual details go in Objective, environment
+in Scope, and reproduction in Verification; documentation locations/references go
+in Scope. Guidance uses plain-text lead-ins instead of extra Markdown headings.
+The pre-fix sentinel probe demonstrated 16 omitted field values across six forms.
+Corrected verification passed 42 intake scenarios and exact preservation of all
+24 submitted answers, including bug reproduction and documentation paths.
+Independent review finding ISSUE-FORMS-1 on PR #4 confirmed this boundary; the
+forms-only correction addresses it without changing runtime behavior.
+
+### Issue-template review completion and release notes
+
+Independent code review signed off on `82603c7a8c3ad84fa4cb77dff9e0a4a33b30c64f`: [report](https://github.com/talaniz/prime-mover/pull/4#issuecomment-5762473256). Independent documentation workflow E2E then signed off on that same head: [report](https://github.com/talaniz/prime-mover/pull/4#issuecomment-5762515822). The latter passed 54 actual policy decisions and exact preservation of 24 full answers across both projects, with no findings. Implementation CI passed.
+
+Added `harness/release-notes/issue-templates.md` after both reviews, derived from this log and the linked reports. Native GitHub UI remains a post-merge check; no live issues, execution jobs, merge or deployment occurred. Both reviewers must revalidate this notes-only final head; authoritative final sign-offs and CI remain on PR #4.
