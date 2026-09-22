@@ -128,3 +128,32 @@ A systemd launcher exit code alone is not dependency success: the failed-prerequ
 rehearsal returned launcher exit 0 while the authoritative job result was `dependency`.
 Use unit/job state and execution evidence together. See the execution log for exact
 commands, result counts, IDs, timestamps and artifacts.
+
+
+## Base branch advanced before publication
+
+`base-branch-changed` means the remote base no longer equals the recorded workspace
+base. Publication is blocked before push/PR creation; the completed implementation,
+verification artifacts, deadlines and operation history remain intact. Older releases
+reported this condition as the generic `implementation-error`. Compare the recorded
+workspace base with the remote base and inspect the operations before attributing an
+older failure to this condition. Do not suppress the base check or reset the plan.
+
+A same-generation `retry` retains the old base and does not resolve this blocker.
+To request fresh execution against current main, first inspect the job and its exact
+recorded remote turn. Confirm terminal remote execution, no lease, no active turn,
+no pending operation/acknowledgment, and no ambiguous publication. Preserve the old
+worktree, commits, artifacts and ledger. Then use the supported operator commands:
+
+```sh
+node dist/cli.js cancel CONFIG_PATH JOB_ID "Base advanced; terminal work verified and retained"
+node dist/cli.js rerun CONFIG_PATH JOB_ID "Reimplement against current base after reviewed base drift"
+```
+
+`rerun` requires a terminal prior generation and fresh issue authorization. It creates
+a linked new generation and acknowledgment; it does not rewrite the prior generation,
+reset its budgets, reuse its verification, or manually copy its implementation. The
+new generation receives the configured execution budget. Do not use rerun to evade
+an exhausted budget or unresolved operation. Monitor its actual implementation and
+publication; the resulting draft still requires independent reviews. No merge or
+application deployment is implied.

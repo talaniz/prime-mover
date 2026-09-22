@@ -282,7 +282,7 @@ test("advanced base and dirty post-verification output block publication", async
         title: "Fixture",
         body: "Evidence",
       }),
-    /Base branch changed/,
+    (error) => error.code === "base-branch-changed",
   );
   assert.equal(f.calls, 0);
 });

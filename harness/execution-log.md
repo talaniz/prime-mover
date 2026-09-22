@@ -1739,3 +1739,13 @@ sign-offs; PM was returned to draft for this two-file documentation correction.
 No executable changes or application reruns are needed. Final reviewers must
 revalidate the new documentation SHA; the PR records remain authoritative. Diff
 whitespace and local documentation-link checks pass.
+
+## Live issue publication recovery — 2026-09-21
+
+User authorizes focused fixes, targeted worker deployment/restarts and supported recovery until a real issue reaches a worker-published implementation PR. No UI merge/deployment is authorized. Acceptance: distinguish base drift, retain guards and all completed work/budgets, and demonstrate actual automated publication for DOOM #16.
+
+Generation 0 (`821e7d0a-1c6a-4549-90fa-a0f28ee2fc9b`) was acknowledged, implemented as `37a87aaa42cc0baee92c3f338c4b62c901ff2624`, and passed both configured commands. Authoritative thread/read confirms its exact turn completed. DOOM main advanced from `79e139e` to `643911a` during execution, before the publication guard. No push/PR intent exists. The guard was correct but the generic implementation-error hid its cause.
+
+Regression red: `npm run build && node --test --test-name-pattern='base drift' test/integration/implementation.test.mjs` exited 1: actual implementation-error, expected base-branch-changed. Fix throws the existing typed ExecutionBlocked and documents cancellation/rerun with retained prior evidence and budgets. Green: both affected integration suites pass 16/16; whitespace passes. No refactor needed. Full checks/reviews and live recovery evidence follow; publication success is not yet claimed.
+
+Full `npm run check` passed: strict TypeScript, 77 unit, 206 integration and 9 CLI E2E tests (292 total), zero failures. This is regression coverage, not evidence that the real issue has published yet.
