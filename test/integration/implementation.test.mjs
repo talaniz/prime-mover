@@ -87,6 +87,12 @@ async function fixture(t, mode = "success") {
   const agent = {
     start: async (ctx, input) => {
       starts++;
+      if (mode === "base-changed") {
+        writeFileSync(join(source, "upstream.md"), "Concurrent upstream change");
+        git(source, "add", "upstream.md");
+        git(source, "commit", "-m", "Advance upstream during implementation");
+        git(source, "push", remote, "main");
+      }
       git(input.cwd, "config", "user.name", "Fixture");
       git(input.cwd, "config", "user.email", "fixture@example.invalid");
       if (mode !== "no-op")
@@ -214,4 +220,21 @@ test("active-turn observation does not poll GitHub faster than configured intake
   const f = await fixture(t, "slow");
   assert.equal(await f.scheduler.runOnce(ctx => f.worker.run(ctx)), "pr-open");
   assert.ok(f.guards <= 8, `unexpected GitHub authorization polls: ${f.guards}`);
+});
+
+
+test("base drift retains implementation evidence and reports an actionable blocker without publication", async (t) => {
+  const f = await fixture(t, "base-changed");
+  await f.scheduler.runOnce(ctx => f.worker.run(ctx));
+  const job = f.store.job(f.id);
+  assert.equal(job.stage, "blocked");
+  assert.equal(job.blockCode, "base-branch-changed");
+  assert.equal(job.activeTurnId, null);
+  assert.equal(job.leaseOwner, null);
+  assert.equal(f.posts, 0);
+  const operations = f.store.operations(f.id);
+  for (const kind of ["execution-budget", "commit", "verification"])
+    assert.ok(operations.some(o => o.kind === kind && o.status === "done"));
+  assert.ok(!operations.some(o => ["push", "pull-create"].includes(o.kind)));
+  assert.equal(git(f.remote, "for-each-ref", "--format=%(refname)", "refs/heads/prime-mover/"), "");
 });

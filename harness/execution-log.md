@@ -1739,3 +1739,25 @@ sign-offs; PM was returned to draft for this two-file documentation correction.
 No executable changes or application reruns are needed. Final reviewers must
 revalidate the new documentation SHA; the PR records remain authoritative. Diff
 whitespace and local documentation-link checks pass.
+
+## Live issue publication recovery — 2026-09-21
+
+User authorizes focused fixes, targeted worker deployment/restarts and supported recovery until a real issue reaches a worker-published implementation PR. No UI merge/deployment is authorized. Acceptance: distinguish base drift, retain guards and all completed work/budgets, and demonstrate actual automated publication for DOOM #16.
+
+Generation 0 (`821e7d0a-1c6a-4549-90fa-a0f28ee2fc9b`) was acknowledged, implemented as `37a87aaa42cc0baee92c3f338c4b62c901ff2624`, and passed both configured commands. Authoritative thread/read confirms its exact turn completed. DOOM main advanced from `79e139e` to `643911a` during execution, before the publication guard. No push/PR intent exists. The guard was correct but the generic implementation-error hid its cause.
+
+Regression red: `npm run build && node --test --test-name-pattern='base drift' test/integration/implementation.test.mjs` exited 1: actual implementation-error, expected base-branch-changed. Fix throws the existing typed ExecutionBlocked and documents cancellation/rerun with retained prior evidence and budgets. Green: both affected integration suites pass 16/16; whitespace passes. No refactor needed. Full checks/reviews and live recovery evidence follow; publication success is not yet claimed.
+
+Full `npm run check` passed: strict TypeScript, 77 unit, 206 integration and 9 CLI E2E tests (292 total), zero failures. This is regression coverage, not evidence that the real issue has published yet.
+
+### Reviewed deployment and real publication
+
+Code sign-off on `d338686980251e505b664391de8b1fc56541b7fa`: https://github.com/talaniz/prime-mover/pull/5#issuecomment-5769879521 . Subsequent isolated workflow E2E sign-off: https://github.com/talaniz/prime-mover/pull/5#issuecomment-5769904610 . The real-Git/SQLite rehearsal exercised drift blocking, terminal cancellation, denied unauthorized rerun, fresh authorized generation and preservation of prior operations/budget/worktree; GitHub/agent adapters were fixtures.
+
+Under explicit user deployment authorization, paused intake/stopped only the worker, verified SQLite snapshot and isolated paused restore (schema 2), built separate release `primeMover-d33868698025`, passed doctor, and changed only the worker's release paths. Rollback unit and private receipts are in `/home/palpatine/.local/state/prime-mover/deployments/live-recovery-d338686/`. DOOM, metadata and shared app server were not restarted; no ledger replacement. Original task's terminal status, no pending operations, no remote branch/PR and unexhausted job budget were confirmed before supported CLI cancel/resume/rerun. Original operation and budget fingerprints remain unchanged.
+
+Fresh generation 1 job `60f2d03d-4935-4fca-a27b-4606a5d6b2aa` received [intake acknowledgment](https://github.com/talaniz/doom-control/issues/16#issuecomment-5769909713), under the existing allowlisted talaniz authorization. Actual task `01a0c6b7-464a-7dc3-85ac-d5074d78c4d1`, turn `01a0c6b7-4740-79a1-9c17-ea6cc2f144d2` completed. Prime Mover itself committed `3bb086cb690f7a5f510af0e62aa601d35e9b462c`, ran both configured verification commands successfully, pushed its branch and published [DOOM draft PR #17](https://github.com/talaniz/doom-control/pull/17). Ledger commit/push/pull-create results are done and implementation-pr-open records number 17. No manual implementation or PR creation substituted for the worker.
+
+Published base `643911acadc72e129a22617b5cc755e7505fe8c9`; diff has 23 files, 200 additions and 11 deletions. It implements relative snapshot/poll/outcome times, native keyboard/touch exact-time disclosures, deterministic tests and desktop/mobile evidence. Actual worker verification: npm run check exit 0 at 2026-09-22T01:33:49.918Z; npm test exit 0 at 01:34:23.790Z (30 tests). [Exact-head CI passed](https://github.com/talaniz/doom-control/actions/runs/35676269598). The implementation evidence index records browser interactions and 18 inspected screenshots; all four indexed source fingerprints match the published files. These are implementation evidence, not independent DOOM review sign-offs.
+
+Publication milestone achieved; DOOM PR #17 remains draft with independent reviews pending at this observation. No merge or UI deployment occurred. The existing worker may continue its normal gated review workflow. The PM fix's release notes are generated after both focused reviews; final notes-head revalidations remain authoritative on PR #5.

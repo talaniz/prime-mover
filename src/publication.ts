@@ -1,3 +1,4 @@
+import { ExecutionBlocked } from "./execution-agent.js";
 import { readRemoteReadiness } from "./github-readiness.js";
 import type { ReviewTarget } from "./reviews.js";
 import { randomUUID } from "node:crypto";
@@ -260,7 +261,7 @@ export class Publication {
       (await this.remoteHead(plan, project, project.baseBranch)) !==
       plan.baseSha
     )
-      throw new Error("Base branch changed; reconcile before publication");
+      throw new ExecutionBlocked("base-branch-changed");
     const remoteHead = await this.remoteHead(plan, project, plan.branch);
     const ownedHeads = this.store
       .operations(context.lease.jobId)
