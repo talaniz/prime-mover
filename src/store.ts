@@ -1,7 +1,11 @@
 import { backupDatabase, restoreDatabase } from "./backup.js";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { randomUUID } from "node:crypto";
-import { Reviews } from "./reviews.js";
+import {
+  reassessmentRequest,
+  type ReassessmentRequest,
+} from "./reassessment.js";
+import { Reviews, type ReviewTarget, type ReviewReport } from "./reviews.js";
 import { readinessEvidence, type RemoteReadiness } from "./readiness.js";
 import type { ProjectConfig } from "./config.js";
 import type { JobStage } from "./contracts.js";
@@ -1130,6 +1134,119 @@ export class Store {
         proof,
       });
       return { jobId: id, owner, epoch };
+    });
+  }
+  /** Atomically retain the blocked result and reserve exactly one next review round. */
+  reassessCodeReview(
+    lease: Lease,
+    value: ReassessmentRequest,
+    why: string,
+    target: ReviewTarget,
+    maxRounds: number,
+  ): number {
+    const request = reassessmentRequest(value);
+    reason(why);
+    return this.transaction(() => {
+      const job = this.assertWorker(lease),
+        ops = this.operations(job.id);
+      const deadline = (
+        ops.find((o) => o.key === "implementation-budget")?.input as {
+          deadline?: number;
+        }
+      )?.deadline;
+      if (
+        job.stage !== "code-review" ||
+        job.activeTurnId ||
+        this.paused() ||
+        !Number.isSafeInteger(deadline) ||
+        this.now() >= deadline! ||
+        !Number.isSafeInteger(maxRounds) ||
+        maxRounds < 1
+      )
+        throw new Error(
+          "Reassessment requires an idle review lease and remaining original budget",
+        );
+      if (target.head !== request.head || target.base !== request.base)
+        throw new Error("Reassessment target changed");
+      const key = `code-review-reassessment:${request.requestId}`;
+      const input = { request, reason: why, target };
+      const prior = ops.find((o) => o.key === key);
+      if (prior) {
+        if (
+          prior.kind !== "code-review-reassessment" ||
+          prior.status !== "done" ||
+          json(prior.input) !== json(input)
+        )
+          throw new Error(
+            "Reassessment request ID already used with different evidence",
+          );
+        return (prior.result as { nextRound: number }).nextRound;
+      }
+      const pending = ops.filter((o) => o.status === "pending");
+      const cycle = pending[0];
+      const match = cycle?.key.match(/^review-cycle:([1-9][0-9]*)$/);
+      if (
+        pending.length !== 1 ||
+        cycle?.kind !== "review-cycle" ||
+        !match ||
+        this.one("SELECT job_id FROM outbox WHERE status='pending'")
+      )
+        throw new Error(
+          "Reassessment requires only a completed blocked review awaiting disposition",
+        );
+      const round = Number(match[1]),
+        nextRound = round + 1;
+      if (round >= maxRounds) throw new Error("Review cycle budget exhausted");
+      const record = ops.find((o) => o.key === `code-review-${round}:round`);
+      const report = record?.result as ReviewReport | undefined;
+      if (
+        record?.status !== "done" ||
+        report?.verdict !== "blocked" ||
+        report.head !== target.head ||
+        report.base !== target.base ||
+        json(report.commits) !== json(target.commits) ||
+        ops.some(
+          (o) =>
+            o.key === `review-cycle:${nextRound}` ||
+            o.key.startsWith(`code-review-${nextRound}:`),
+        )
+      )
+        throw new Error("Blocked review target requires reconciliation");
+      const result = { ...input, previousRound: round, nextRound };
+      this.run(
+        "INSERT INTO operations VALUES (?,?,?,?, 'done',?,?,?)",
+        job.id,
+        key,
+        "code-review-reassessment",
+        json(input),
+        json(result),
+        this.now(),
+        this.now(),
+      );
+      this.run(
+        "UPDATE operations SET status='done',result=?,updated_at=? WHERE job_id=? AND key=?",
+        json({ head: report.head, verdict: "blocked", reassessment: key }),
+        this.now(),
+        job.id,
+        cycle.key,
+      );
+      this.run(
+        "INSERT INTO operations VALUES (?,?,?,?, 'pending',NULL,?,?)",
+        job.id,
+        `review-cycle:${nextRound}`,
+        "review-cycle",
+        json({ round: nextRound }),
+        this.now(),
+        this.now(),
+      );
+      this.event(job.id, "operator-review-reassessment", {
+        key,
+        previousRound: round,
+        nextRound,
+        target,
+        reason: why,
+      });
+      return nextRound;
     });
   }
   claimCodeReview(id: string, owner: string, duration: number): Lease {

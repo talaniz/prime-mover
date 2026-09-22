@@ -199,7 +199,7 @@ async function fixture(t, mode = "success") {
         else reviews++;
         const hasFinding = e2e
           ? e2eReviews === 1
-          : mode !== "e2e" && reviews === 1;
+          : mode !== "e2e" && mode !== "reassessment" && reviews === 1;
         const shas = git(
           plan.cwd,
           "rev-list",
@@ -222,7 +222,13 @@ async function fixture(t, mode = "success") {
             head: shas.at(-1),
             base: plan.baseSha,
             commits: shas,
-            verdict: hasFinding ? "changes-requested" : "sign-off",
+            verdict:
+              mode === "reassessment" &&
+              !input.prompt.includes("ORIGINAL_RED_EVIDENCE")
+                ? "blocked"
+                : hasFinding
+                  ? "changes-requested"
+                  : "sign-off",
             ...(e2e
               ? {
                   acceptance: contract.acceptance,
@@ -248,10 +254,14 @@ async function fixture(t, mode = "success") {
                 }
               : {}),
             checks: ["Inspected all commits and actual README"],
-            limitations: [],
+            limitations:
+              mode === "reassessment" &&
+              !input.prompt.includes("ORIGINAL_RED_EVIDENCE")
+                ? ["Original red evidence missing"]
+                : [],
             findings: hasFinding ? [finding] : [],
             resolutions:
-              hasFinding || (mode === "e2e" && !e2e)
+              hasFinding || mode === "reassessment" || (mode === "e2e" && !e2e)
                 ? []
                 : [
                     {
@@ -448,4 +458,262 @@ test("E2E workflow finding returns corrected code through code review before a f
     "independent-reviewer",
     "independent-e2e-reviewer",
   ]);
+});
+
+async function blockedReassessment(t) {
+  const f = await fixture(t, "reassessment");
+  assert.equal(
+    await f.scheduler.runClaimed(f.reviewLease, (ctx) =>
+      f.coordinator.run(ctx),
+    ),
+    "blocked",
+  );
+  assert.equal(f.store.job(f.id).blockCode, "reviewer-blocked");
+  const last = f.store
+    .operations(f.id)
+    .filter((o) => o.kind === "turn-start")
+    .at(-1);
+  const lease = f.store.reclaimCodeReview(
+    f.id,
+    "operator",
+    30000,
+    "New evidence supplied",
+    {
+      threadId: last.input.threadId,
+      turnId: last.result.turnId,
+    },
+  );
+  const request = {
+    requestId: "original-red-1",
+    head: git(f.plan.cwd, "rev-parse", "HEAD"),
+    base: f.plan.baseSha,
+    evidence:
+      "ORIGINAL_RED_EVIDENCE: original failing test output and owner clarification",
+  };
+  return { ...f, lease, request };
+}
+test("operator reassessment opens a fresh independent round with new evidence and preserves the blocked report", async (t) => {
+  const f = await blockedReassessment(t);
+  const before = f.store.operations(f.id);
+  const budget = before.find((o) => o.key === "implementation-budget");
+  const oldReport = before.find((o) => o.key === "code-review-1:round");
+  const coordinator = new ReviewCoordinator(f.store, f.config, f.services, {
+    pollMs: 1,
+    reassessment: {
+      request: f.request,
+      reason: "Owner clarification and recovered original red output",
+    },
+  });
+  assert.equal(
+    await f.scheduler.runClaimed(f.lease, (ctx) => coordinator.run(ctx)),
+    "e2e-review",
+  );
+  const after = f.store.operations(f.id);
+  assert.deepEqual(
+    after.find((o) => o.key === "implementation-budget"),
+    budget,
+  );
+  assert.deepEqual(
+    after.find((o) => o.key === "code-review-1:round"),
+    oldReport,
+  );
+  assert.equal(
+    after.find((o) => o.key === "code-review-2:round").result.verdict,
+    "sign-off",
+  );
+  assert.equal(f.roles.filter((r) => r === "code-review").length, 2);
+  assert.deepEqual(f.taskIds, ["independent-reviewer"]);
+  assert.equal(
+    f.store
+      .events(f.id)
+      .filter((e) => e.kind === "operator-review-reassessment").length,
+    1,
+  );
+});
+
+for (const mode of [
+  "stale-target",
+  "revoked",
+  "expired",
+  "pending",
+  "round-limit",
+  "active-turn",
+  "paused",
+  "changed-request",
+]) {
+  test(`reassessment rejects ${mode} without replacing reports or starting a reviewer`, async (t) => {
+    const f = await blockedReassessment(t);
+    const target = (
+      await f.services.inputs.collect(f.plan, f.store.projects()[0], 3)
+    ).target;
+    if (mode === "stale-target") f.request.head = "f".repeat(40);
+    if (mode === "revoked")
+      f.services.intake.authorize = async () => {
+        throw Error("Authorization revoked");
+      };
+    if (mode === "pending") f.store.operation(f.lease, "unrelated", "push", {});
+    if (mode === "active-turn")
+      f.store.recordObservedTurn(
+        f.lease,
+        "independent-reviewer",
+        "uncertain-turn",
+      );
+    if (mode === "paused") f.store.setPaused(true);
+    if (mode === "expired") {
+      f.store.heartbeat(f.lease, 600000);
+      f.store.now = () => Date.now() + 500000;
+    }
+    if (mode === "round-limit") {
+      assert.throws(
+        () =>
+          f.store.reassessCodeReview(
+            f.lease,
+            f.request,
+            "Evidence recovered",
+            target,
+            1,
+          ),
+        /budget exhausted/,
+      );
+      return;
+    }
+    if (mode === "changed-request") {
+      f.store.reassessCodeReview(
+        f.lease,
+        f.request,
+        "Evidence recovered",
+        target,
+        4,
+      );
+      assert.throws(
+        () =>
+          f.store.reassessCodeReview(
+            f.lease,
+            { ...f.request, evidence: "Different evidence" },
+            "Evidence recovered",
+            target,
+            4,
+          ),
+        /already used/,
+      );
+      return;
+    }
+    const before = f.store.operations(f.id);
+    const coordinator = new ReviewCoordinator(f.store, f.config, f.services, {
+      pollMs: 1,
+      reassessment: { request: f.request, reason: "Evidence recovered" },
+    });
+    await f.scheduler
+      .runClaimed(f.lease, (ctx) => coordinator.run(ctx))
+      .catch(() => {});
+    assert.deepEqual(f.store.operations(f.id), before);
+    assert.equal(f.roles.filter((r) => r === "code-review").length, 1);
+  });
+}
+test("durable reassessment reservation survives interruption and duplicate request without resetting budgets", async (t) => {
+  const f = await blockedReassessment(t);
+  const target = (
+    await f.services.inputs.collect(f.plan, f.store.projects()[0], 3)
+  ).target;
+  for (let i = 0; i < 3; i++)
+    f.store.consumeBudget(f.lease, "recovery-attempts", 3);
+  f.store.consumeBudget(f.lease, "correction-cycles", 1);
+  const before = f.store.operations(f.id);
+  assert.equal(
+    f.store.reassessCodeReview(
+      f.lease,
+      f.request,
+      "Evidence recovered",
+      target,
+      4,
+    ),
+    2,
+  );
+  const reserved = f.store.operations(f.id);
+  assert.equal(
+    f.store.reassessCodeReview(
+      f.lease,
+      f.request,
+      "Evidence recovered",
+      target,
+      4,
+    ),
+    2,
+  );
+  assert.deepEqual(f.store.operations(f.id), reserved);
+  assert.equal(f.store.budgetUsed(f.id, "recovery-attempts"), 3);
+  assert.equal(f.store.budgetUsed(f.id, "correction-cycles"), 1);
+  assert.deepEqual(
+    reserved.find((o) => o.key === "code-review-1:round"),
+    before.find((o) => o.key === "code-review-1:round"),
+  );
+  f.store.blockAndRelease(f.lease, "operator-interrupted");
+  const last = reserved.filter((o) => o.kind === "turn-start").at(-1);
+  const lease = f.store.reclaimCodeReview(
+    f.id,
+    "restart",
+    30000,
+    "Continue recorded request",
+    { threadId: last.input.threadId, turnId: last.result.turnId },
+  );
+  // Ordinary continuation also sees the durable evidence after process loss.
+  assert.equal(
+    await f.scheduler.runClaimed(lease, (ctx) => f.coordinator.run(ctx)),
+    "e2e-review",
+  );
+  assert.equal(f.roles.filter((r) => r === "code-review").length, 2);
+  assert.equal(
+    f.store
+      .events(f.id)
+      .filter((e) => e.kind === "operator-review-reassessment").length,
+    1,
+  );
+});
+test("ordinary resume keeps a genuine blocked report blocked", async (t) => {
+  const f = await blockedReassessment(t);
+  assert.equal(
+    await f.scheduler.runClaimed(f.lease, (ctx) => f.coordinator.run(ctx)),
+    "blocked",
+  );
+  assert.equal(f.store.job(f.id).blockCode, "reviewer-blocked");
+  assert.equal(f.roles.filter((r) => r === "code-review").length, 1);
+});
+
+test("new evidence never forces sign-off and replay never opens a third round", async (t) => {
+  const f = await blockedReassessment(t);
+  f.request.evidence =
+    "Insufficient context, independently assess the remaining gap";
+  const options = {
+    pollMs: 1,
+    reassessment: {
+      request: f.request,
+      reason: "Please reassess this evidence",
+    },
+  };
+  const coordinator = new ReviewCoordinator(
+    f.store,
+    f.config,
+    f.services,
+    options,
+  );
+  assert.equal(
+    await f.scheduler.runClaimed(f.lease, (ctx) => coordinator.run(ctx)),
+    "blocked",
+  );
+  assert.equal(f.store.job(f.id).blockCode, "reviewer-blocked");
+  const ops = f.store.operations(f.id),
+    last = ops.filter((o) => o.kind === "turn-start").at(-1);
+  const lease = f.store.reclaimCodeReview(
+    f.id,
+    "repeat",
+    30000,
+    options.reassessment.reason,
+    { threadId: last.input.threadId, turnId: last.result.turnId },
+  );
+  assert.equal(
+    await f.scheduler.runClaimed(lease, (ctx) => coordinator.run(ctx)),
+    "blocked",
+  );
+  assert.deepEqual(f.store.operations(f.id), ops);
+  assert.equal(f.roles.filter((r) => r === "code-review").length, 2);
 });

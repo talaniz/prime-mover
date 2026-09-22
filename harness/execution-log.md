@@ -1783,3 +1783,37 @@ Deployed only the reviewed candidate worker release `primeMover-011f0c88edb1` af
 Authoritative completed-turn proof, current authorization and unchanged PR19 head were verified before resumption. The automatic-recovery counter stays 3 and original deadline stays `1790063072573`. The same reviewer task `01a0c6d6-2954-7f82-8985-8e007ce75db5` completed clarification turn `01a0c6ec-c876-78a2-a1b4-d67727a61453`. Prime Mover validated and [published its report on DOOM PR19](https://github.com/talaniz/doom-control/pull/19#issuecomment-5770327371), preserving both original findings, both limitations and the changes-requested verdict byte-for-byte at the parsed-field level. All check entries are nonempty. The coordinator then started its triage task on the same job; the malformed-report blocker is resolved.
 
 This proves live resumption past the failing boundary, not approval/completion of the DOOM issue. PR19 remains draft, with corrective work/reviews pending. No manual DOOM implementation, budget reset, merge or UI deployment occurred. Release notes follow both focused reviews; final notes-head sign-offs remain on PR6.
+
+## Operator review reassessment — 2026-09-21
+
+User requested a supported reassess-after-new-evidence path for the genuinely blocked
+DOOM issue18 review. Acceptance: an explicit, bounded evidence file and reason tied to
+current PR head/base may open the next independent code-review round; retain original
+reports, deadline, recovery/correction budgets, reviewer identity and normal sign-off
+gates. Current issue authorization, terminal-turn proof, exclusive ownership and clean
+actual PR target remain mandatory. Duplicate request IDs must not create extra rounds;
+changed payloads, stale targets, exhausted rounds/time and unrelated pending work fail
+closed. Evidence is untrusted review context, never authority or a forced verdict.
+
+Verification contract before implementation: a real Git/SQLite coordinator fixture first
+records a valid blocked review, then supplies recovered evidence through the proposed
+operator option. Expected red is blocked instead of e2e-review, since the old coordinator
+replays the cached report. Add parser bounds and negative/replay/reservation tests, run
+the full npm run check, then independent code and actual workflow E2E reviews. No live
+reassessment, merge or deployment is claimed at this point.
+
+Observed red: `npm run build && node --test --test-name-pattern='operator reassessment' test/integration/review-coordinator.test.mjs` exited 1 with actual blocked, expected e2e-review. After implementation the same test passed. Focused parser/coordinator coverage passed, then full `npm run check` passed strict TypeScript and 308 tests (79 unit,220 integration,9 CLI E2E), zero failures. Guards cover stale targets, revoked authorization, original-budget expiry, unrelated pending work, active turns, pause, round exhaustion, changed request payload, replay after interruption and another genuinely blocked verdict. The exhausted automatic recovery count remains 3 across reassessment. Whitespace passes. Formatting was applied; no further refactor was needed.
+
+The coordinator workflow uses real temporary Git repositories and SQLite with fixture external adapters. Existing CLI E2E regression checks passed; new-command workflow acceptance and independent review remain to be performed. Production issue18 remains blocked with no lease/active turn; its original deadline and budget are intact. Prepared evidence contains only the approved clarification and sanitized original red output/source references.
+
+### Independent review and supervised live reassessment
+
+[Code review](https://github.com/talaniz/prime-mover/pull/7#issuecomment-5770813880) signed off `c31f929e82094a6aa2ff60e59c8025606dac3810`, independently reproducing the baseline red and passing 46 focused checks. A distinct [E2E reviewer](https://github.com/talaniz/prime-mover/pull/7#issuecomment-5770860559) then signed off the same head after seven actual CLI workflows with real Git/SQLite/Intake/ExecutionAgent and isolated gh/Unix WebSocket fixtures, plus 14 targeted tests. Success, still-blocked verdict, duplicate request, stale target, revoked authorization, nonterminal proof and interrupted-reservation continuation/replay were verified. Fixture external boundaries are explicit; no live result was inferred. Named agent roles were unavailable, so their developer instructions were passed verbatim to distinct reviewers. [Main verification](https://github.com/talaniz/prime-mover/pull/7#issuecomment-5770847514) also records CI and CLI preflight evidence.
+
+Under continuing focused worker recovery/deployment authorization, deployed the reviewed immutable worker release `primeMover-c31f929e8209` after npm ci/build, doctor, service-preflight and candidate unit validation. SQLite-consistent backup and isolated paused restore passed (schema2,3jobs,81operations,313events); no ledger replacement. Private backup receipt, rollback unit and baseline hashes are in `/home/palpatine/.local/state/prime-mover/deployments/review-reassessment/`. Only the worker unit release paths changed. DOOM, metadata and shared app server were not restarted.
+
+The new supported command, supervised by `prime-mover-review-reassess.service` with the worker's resource limits, accepted request `issue18-owner-clarification-20260921` for existing job `2123eecf-7030-404e-9e60-b9e1ee5470d9`. Evidence contains the owner-approved naming clarification and sanitized original red test output with source references. It reverified current authorization, terminal-turn proof and PR19 target head `0485450e7a14c2bcb21875d8adeecfdbda6f7f38` / base `643911acadc72e129a22617b5cc755e7505fe8c9`.
+
+Live transition observed: reassessment request done, previous blocked cycle retained as blocked with a link to the request, new cycle3/round3 pending, and new turn `01a0c732-a6c1-73a2-a781-6ef923efcabc` on the same independent reviewer task `01a0c6d6-2954-7f82-8985-8e007ce75db5`. All44 previously completed issue18 operation hashes remain unchanged. Automatic recovery count remains3, review corrections1, and original deadline1790063072573 is unchanged. The ordinary worker supervisor remains stopped while the explicit continuation owns the job.
+
+This proves the live reassessment path has moved past the cached blocked report. It does not yet claim the reviewer's new verdict, E2E approval or readiness of DOOM PR19. No manual DOOM implementation, issue generation, merge or UI deployment occurred. Release notes summarize these verified observations; final notes-head sign-offs and later live status remain on PR7.

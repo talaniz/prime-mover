@@ -147,6 +147,7 @@ export class CodeReviewRound {
         (o) =>
           [
             "code-review-report",
+            "code-review-reassessment",
             "e2e-review-report",
             "review-disposition",
             "verification",

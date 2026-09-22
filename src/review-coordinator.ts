@@ -1,3 +1,4 @@
+import type { ReassessmentRequest } from "./reassessment.js";
 import type { Store } from "./store.js";
 import type { Config } from "./config.js";
 import type { WorkContext } from "./scheduler.js";
@@ -76,6 +77,7 @@ export class ReviewCoordinator {
       approvalWaitMs?: number;
       role?: ReviewRole;
       retainLease?: boolean;
+      reassessment?: { request: ReassessmentRequest; reason: string };
     } = {},
   ) {}
   private get role(): ReviewRole {
@@ -379,6 +381,24 @@ export class ReviewCoordinator {
         );
       if (!Number.isSafeInteger(deadline) || Date.now() >= deadline)
         throw new ExecutionBlocked("budget-exhausted");
+      if (this.options.reassessment) {
+        if (this.role !== "code-review")
+          throw new ExecutionBlocked("invalid-reassessment-role");
+        await this.services.intake.authorize(job.id);
+        const current = await this.services.inputs.collect(
+          plan,
+          project,
+          job.prNumber,
+        );
+        context.assertActive();
+        this.store.reassessCodeReview(
+          context.lease,
+          this.options.reassessment.request,
+          this.options.reassessment.reason,
+          current.target,
+          2 * this.config.limits.correctionCycles + 2,
+        );
+      }
       await this.ensureCodeReview(context);
       const round = new CodeReviewRound(
         this.store,

@@ -187,3 +187,55 @@ supervisor stopped while this command owns the continuation. If observation of t
 command times out, inspect the same process/turn rather than launch a duplicate.
 Restart the supervisor after the command ends and ownership is reconciled. Do not
 use this command to evade expired job budgets or unresolved external side effects.
+
+## Reassess a blocked code review after new evidence
+
+`resume-code-review` resumes recorded work. It deliberately replays a valid blocked
+report; it cannot change the reviewer's conclusion. To supply recovered check output
+or an owner-approved clarification, use the explicit `reassess-code-review` command.
+This initial path supports **code review only**, on the same PR head/base and original
+issue authorization. Material scope changes require the existing issue reconciliation
+workflow; evidence cannot authorize additional work.
+
+Stop the worker supervisor and preserve a verified backup first. Inspect the current
+job, PR target, pending operations and latest completed task. Prepare a local JSON file:
+
+```json
+{
+  "requestId": "issue18-recovered-evidence-1",
+  "head": "CURRENT_40_CHARACTER_HEAD_SHA",
+  "base": "CURRENT_40_CHARACTER_BASE_SHA",
+  "evidence": "Owner-approved clarification, original check output, and source links"
+}
+```
+
+Use actual 40-character lowercase Git SHAs. Request IDs contain 1–64 ASCII letters,
+numbers, underscores or hyphens. The file must be regular, not a symlink, at most
+32 KiB; evidence must be nonempty and at most 16 KiB. Include relevant source content,
+not only URLs: the reviewer does not automatically ingest issue/PR comments. Do not
+include secrets. Keep the same request ID, evidence and reason when retrying after an
+interruption; changing an existing ID's payload is rejected.
+
+```sh
+node dist/cli.js reassess-code-review CONFIG_PATH JOB_ID EVIDENCE_JSON "Recovered original red output and owner clarification"
+```
+
+The command verifies terminal-turn proof and current issue authorization, obtains an
+exclusive fenced lease, checks the actual clean PR target, then atomically records the
+request, retains the old blocked report, and reserves the next review cycle. It requires
+exactly one pending code-review cycle with a completed blocked report and no unrelated
+pending work. It does not grant more review rounds, extend the original deadline, reset
+automatic-recovery/correction counters, replace reviewer identity, or grant sign-off.
+The same independent reviewer receives the original reports plus the new evidence as
+untrusted task data. It may still block or request changes; normal E2E/readiness gates
+remain mandatory.
+
+If interrupted after reservation, `resume-code-review` can continue from the durable
+request; repeating the same reassessment request while blocked is also safe and never
+opens another round. After successful handoff the job is no longer blocked, so repeating
+the command is refused; inspect the recorded result instead. Another blocked verdict
+requires genuinely new evidence and a new request ID, within the remaining round/time
+budget. Keep the supervisor stopped while the command owns work. Restart it only after
+exit and ownership reconciliation; if the reviewer remains blocked, resolve that blocker
+before repeatedly restarting automatic recovery. Merge and deployment remain separate
+human decisions.
