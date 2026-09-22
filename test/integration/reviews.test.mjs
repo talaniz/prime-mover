@@ -396,7 +396,12 @@ test("explicit review continuation requires exact completed-task proof and prese
   f.store.operation(f.lease, "code-review-1:round", "code-review-round", {
     head: B,
   });
-  f.store.blockAndRelease(f.lease, "review-coordinator-error");
+  const budget = { deadline: Date.now() + 60000 };
+  f.store.operation(f.lease, "implementation-budget", "execution-budget", budget);
+  f.store.completeOperation(f.lease, "implementation-budget", budget);
+  for (let i = 0; i < 3; i++) f.store.consumeBudget(f.lease, "recovery-attempts", 3);
+  const original = f.store.operations(f.id);
+  f.store.blockAndRelease(f.lease, "recovery-attempt-budget-exhausted");
   const proof = {
     threadId: "independent-code-reviewer",
     turnId: "review-turn-2",
@@ -419,6 +424,8 @@ test("explicit review continuation requires exact completed-task proof and prese
     "clarify completed report",
     proof,
   );
+  assert.equal(f.store.budgetUsed(f.id, "recovery-attempts"), 3);
+  assert.deepEqual(f.store.operations(f.id), original);
   assert.equal(next.epoch, f.lease.epoch + 1);
   assert.equal(f.store.job(f.id).stage, "code-review");
   assert.equal(
