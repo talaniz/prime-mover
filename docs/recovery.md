@@ -157,3 +157,33 @@ new generation receives the configured execution budget. Do not use rerun to eva
 an exhausted budget or unresolved operation. Monitor its actual implementation and
 publication; the resulting draft still requires independent reviews. No merge or
 application deployment is implied.
+
+## Malformed completed review reports
+
+A completed reviewer may return structurally invalid evidence, such as an empty
+check string. Review validation remains strict: the coordinator retains the raw
+report privately and asks the same independent reviewer to clarify it, at most twice
+per round. It does not delete malformed entries, discard findings, invent checks,
+or treat clarification as sign-off. Persistent invalidity blocks with
+`invalid-review-report`. Authorization, head/base, original deadlines and review
+independence are checked before continuation. Clarification intents and exact task/
+turn identities survive restart; no new automatic-recovery allowance is granted.
+
+For a legacy `review-coordinator-error` or exhausted automatic-recovery allowance,
+first diagnose and fix the underlying fault. Stop the worker supervisor, preserve a
+verified database backup, and inspect the exact latest owned task/turn plus pending
+operations and current PR target. Only after authoritative completed-turn proof,
+current authorization, and remaining original execution budget are confirmed, use:
+
+```sh
+node dist/cli.js resume-code-review CONFIG_PATH JOB_ID "Diagnosed report validation fault; reviewed fix deployed; exact completed turn verified"
+```
+
+This existing explicit operator command reacquires a fenced review lease and resumes
+the recorded round. It does not reset automatic-recovery counters, job deadlines,
+correction budgets, operation history, or reviewer identity. It refuses wrong task
+proof, live competing ownership and unsupported pending operations. Keep the worker
+supervisor stopped while this command owns the continuation. If observation of the
+command times out, inspect the same process/turn rather than launch a duplicate.
+Restart the supervisor after the command ends and ownership is reconciled. Do not
+use this command to evade expired job budgets or unresolved external side effects.

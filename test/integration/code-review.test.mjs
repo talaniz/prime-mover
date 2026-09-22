@@ -106,7 +106,7 @@ function fixture(t, mode = "success") {
       raw = JSON.stringify({
         ...target,
         verdict:
-          mode === "finding"
+          ["finding", "empty-check", "empty-check-stubborn"].includes(mode)
             ? "changes-requested"
             : mode === "unresolved" && starts > 1
               ? "blocked"
@@ -114,6 +114,8 @@ function fixture(t, mode = "success") {
         checks:
           mode === "invalid"
             ? []
+            : (mode === "empty-check" && starts === 1) || mode === "empty-check-stubborn"
+              ? ["Inspected the actual diff", ""]
             : ["Reviewed every commit and combined diff; node --test passed"],
         limitations:
           ["clarify", "unresolved", "stubborn"].includes(mode) &&
@@ -121,7 +123,7 @@ function fixture(t, mode = "success") {
             ? ["A tooling issue required further assessment"]
             : [],
         findings:
-          mode === "finding"
+          ["finding", "empty-check", "empty-check-stubborn"].includes(mode)
             ? [
                 {
                   id: "R1-F1",
@@ -305,6 +307,27 @@ test("contradictory sign-off clarification is bounded and never silently accepte
   await assert.rejects(
     f.round.run(f.context, f.plan, f.project, "code-review-1"),
   );
+  assert.equal(f.starts, 3);
+  assert.equal(f.posts, 0);
+});
+
+
+test("same reviewer repairs an empty check without dropping its findings", async (t) => {
+  const f = fixture(t, "empty-check");
+  const report = await f.round.run(f.context, f.plan, f.project, "code-review-1");
+  assert.equal(report.verdict, "changes-requested");
+  assert.equal(report.taskId, "independent-reviewer");
+  assert.equal(report.findings[0].id, "R1-F1");
+  assert.equal(f.starts, 2);
+  assert.equal(f.posts, 1);
+  const reason = f.store.operations(f.id).find(o => o.kind === "review-report-clarification");
+  assert.ok(JSON.parse(reason.input.raw).checks.includes(""));
+  assert.equal(reason.result.reason, "invalid-review-evidence");
+  assert.throws(() => f.store.finishCodeReview(f.lease));
+});
+test("persistently empty review evidence is bounded and never published", async (t) => {
+  const f = fixture(t, "empty-check-stubborn");
+  await assert.rejects(f.round.run(f.context, f.plan, f.project, "code-review-1"), error => error.code === "invalid-review-report");
   assert.equal(f.starts, 3);
   assert.equal(f.posts, 0);
 });
