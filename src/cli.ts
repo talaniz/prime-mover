@@ -1,3 +1,4 @@
+import { readReassessment } from "./reassessment.js";
 import path from "node:path";
 import { checkResources, requireMemoryController } from "./resources.js";
 import { workerCycle } from "./worker-cycle.js";
@@ -46,6 +47,7 @@ const commands = [
   "e2e-review",
   "recheck-ready",
   "resume-code-review",
+  "reassess-code-review",
   "resume-publication",
   "reconcile-issue",
   "rerun",
@@ -263,12 +265,24 @@ if (!command || !commands.includes(command) || !configPath) {
           "code-review",
           "e2e-review",
           "resume-code-review",
+          "reassess-code-review",
         ].includes(command)
       ) {
         if (!config.gitAuthor)
           throw new Error(
             "Configure gitAuthor.name and gitAuthor.email before execution",
           );
+        if (command === "reassess-code-review" && args.length < 3)
+          throw new Error(
+            "Job ID, evidence JSON file and explicit reason are required",
+          );
+        const reassessment =
+          command === "reassess-code-review"
+            ? {
+                request: await readReassessment(args[1]!),
+                reason: args.slice(2).join(" "),
+              }
+            : undefined;
         if (command === "resume-code-review" && args.length < 2)
           throw new Error("Job ID and explicit reason are required");
         if (
@@ -344,7 +358,10 @@ if (!command || !commands.includes(command) || !configPath) {
               store!,
               config,
               { agent: agent!, inputs, comments, publication, intake },
-              { role: e2e ? "e2e-review" : "code-review" },
+              {
+                role: e2e ? "e2e-review" : "code-review",
+                ...(reassessment ? { reassessment } : {}),
+              },
             );
             await review.run(context);
             if (e2e) {
@@ -411,15 +428,21 @@ if (!command || !commands.includes(command) || !configPath) {
             });
           let result: string;
           if (
-            ["code-review", "resume-code-review", "e2e-review"].includes(
-              command,
-            )
+            [
+              "code-review",
+              "resume-code-review",
+              "reassess-code-review",
+              "e2e-review",
+            ].includes(command)
           ) {
             checkResources();
             const e2e = command === "e2e-review";
             const id = args[0]!;
             let lease;
-            if (command === "resume-code-review") {
+            if (
+              command === "resume-code-review" ||
+              command === "reassess-code-review"
+            ) {
               const last = store
                 .operations(id)
                 .filter((o) => o.kind === "turn-start")
@@ -439,7 +462,7 @@ if (!command || !commands.includes(command) || !configPath) {
                 id,
                 owner,
                 30000,
-                args.slice(1).join(" "),
+                reassessment?.reason ?? args.slice(1).join(" "),
                 proof,
               );
             } else {

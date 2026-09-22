@@ -1783,3 +1783,25 @@ Deployed only the reviewed candidate worker release `primeMover-011f0c88edb1` af
 Authoritative completed-turn proof, current authorization and unchanged PR19 head were verified before resumption. The automatic-recovery counter stays 3 and original deadline stays `1790063072573`. The same reviewer task `01a0c6d6-2954-7f82-8985-8e007ce75db5` completed clarification turn `01a0c6ec-c876-78a2-a1b4-d67727a61453`. Prime Mover validated and [published its report on DOOM PR19](https://github.com/talaniz/doom-control/pull/19#issuecomment-5770327371), preserving both original findings, both limitations and the changes-requested verdict byte-for-byte at the parsed-field level. All check entries are nonempty. The coordinator then started its triage task on the same job; the malformed-report blocker is resolved.
 
 This proves live resumption past the failing boundary, not approval/completion of the DOOM issue. PR19 remains draft, with corrective work/reviews pending. No manual DOOM implementation, budget reset, merge or UI deployment occurred. Release notes follow both focused reviews; final notes-head sign-offs remain on PR6.
+
+## Operator review reassessment — 2026-09-21
+
+User requested a supported reassess-after-new-evidence path for the genuinely blocked
+DOOM issue18 review. Acceptance: an explicit, bounded evidence file and reason tied to
+current PR head/base may open the next independent code-review round; retain original
+reports, deadline, recovery/correction budgets, reviewer identity and normal sign-off
+gates. Current issue authorization, terminal-turn proof, exclusive ownership and clean
+actual PR target remain mandatory. Duplicate request IDs must not create extra rounds;
+changed payloads, stale targets, exhausted rounds/time and unrelated pending work fail
+closed. Evidence is untrusted review context, never authority or a forced verdict.
+
+Verification contract before implementation: a real Git/SQLite coordinator fixture first
+records a valid blocked review, then supplies recovered evidence through the proposed
+operator option. Expected red is blocked instead of e2e-review, since the old coordinator
+replays the cached report. Add parser bounds and negative/replay/reservation tests, run
+the full npm run check, then independent code and actual workflow E2E reviews. No live
+reassessment, merge or deployment is claimed at this point.
+
+Observed red: `npm run build && node --test --test-name-pattern='operator reassessment' test/integration/review-coordinator.test.mjs` exited 1 with actual blocked, expected e2e-review. After implementation the same test passed. Focused parser/coordinator coverage passed, then full `npm run check` passed strict TypeScript and 308 tests (79 unit,220 integration,9 CLI E2E), zero failures. Guards cover stale targets, revoked authorization, original-budget expiry, unrelated pending work, active turns, pause, round exhaustion, changed request payload, replay after interruption and another genuinely blocked verdict. The exhausted automatic recovery count remains 3 across reassessment. Whitespace passes. Formatting was applied; no further refactor was needed.
+
+The coordinator workflow uses real temporary Git repositories and SQLite with fixture external adapters. Existing CLI E2E regression checks passed; new-command workflow acceptance and independent review remain to be performed. Production issue18 remains blocked with no lease/active turn; its original deadline and budget are intact. Prepared evidence contains only the approved clarification and sanitized original red output/source references.
