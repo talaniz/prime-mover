@@ -51,6 +51,47 @@ git diff --check
 
 Credentials, environment-specific configuration, databases and their WAL/SHM sidecars must never be committed. GitHub authentication belongs to the local credential manager; Codex authentication stays with the existing app server.
 
+## Temporal workflow development VM
+
+The `Vagrantfile` creates a local Debian 12 host for Temporal workflow experiments.
+It installs Docker, Go, Postgres, Temporal Server and Temporal UI. This is a
+development fixture for the Temporal workflow branch; it does not activate Prime
+Mover intake, deploy a worker service or change the live DOOM environment.
+
+```sh
+vagrant up
+```
+
+Default guest endpoints:
+
+```text
+Temporal frontend: 192.168.56.50:7233
+Temporal UI:       http://192.168.56.50:8233
+```
+
+Use environment variables to avoid editing the file for local network or version
+differences:
+
+```sh
+PRIME_MOVER_VM_IP=192.168.56.51 vagrant up
+TEMPORAL_VERSION=1.25.2 TEMPORAL_UI_VERSION=2.31.2 vagrant provision
+```
+
+Inside the guest, `temporal-compose` wraps the generated Docker Compose file:
+
+```sh
+vagrant ssh
+temporal-compose ps
+temporal-compose logs -f temporal
+docker run --rm --network host temporalio/admin-tools:1.25.2 temporal operator cluster health
+```
+
+Go workflow workers can run on this VM or on another host that can reach
+`192.168.56.50:7233`. If using the host machine, the forwarded port also exposes
+Temporal at `127.0.0.1:7233`; Vagrant may auto-correct the host port if it is
+already occupied, so check the `vagrant up` output when another Temporal instance
+is running.
+
 ## Execution harness
 
 Start with [harness/README.md](harness/README.md) for the eight ordered build contracts,
