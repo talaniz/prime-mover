@@ -140,3 +140,73 @@ test("pending operation blocks outcome recording even without an active lease", 
   );
   assert.equal(f.store.job(f.id).stage, "ready");
 });
+
+// Reconciliation precedes the normal readiness recheck in each worker cycle.
+for (const failure of ["changed-head", "unavailable"]) {
+  test(`outcome ${failure} revokes stale readiness only when applying`, async (t) => {
+    const { reconcileOutcomes } = await import("../../dist/outcome.js");
+    const { workerCycle } = await import("../../dist/worker-cycle.js");
+    const f = completed(t);
+    const transport = async () =>
+      failure === "unavailable"
+        ? { status: 503, body: null }
+        : {
+            status: 200,
+            body: {
+              number: 3,
+              state: "open",
+              merged: false,
+              merged_at: null,
+              head: {
+                sha: "d".repeat(40),
+                repo: { full_name: f.project.repository },
+              },
+              base: {
+                ref: f.project.baseBranch,
+                repo: { full_name: f.project.repository },
+              },
+            },
+          };
+    const events = f.store.events(f.id);
+    await assert.rejects(reconcileOutcomes(f.store, false, transport));
+    assert.equal(f.store.job(f.id).stage, "ready");
+    assert.deepEqual(f.store.events(f.id), events);
+    let executed = false;
+    await assert.rejects(
+      workerCycle(f.store, {
+        preflight: async () => {},
+        recover: async () => "clear",
+        outcomes: () => reconcileOutcomes(f.store, true, transport),
+        recheck: async () => {
+          executed = true;
+        },
+        poll: async () => {
+          executed = true;
+        },
+        implement: async () => {
+          executed = true;
+        },
+      }),
+    );
+    assert.equal(executed, false);
+    assert.equal(f.store.job(f.id).stage, "blocked");
+    assert.equal(f.store.job(f.id).blockCode, "readiness-check-failed");
+    const blockedEvents = f.store.events(f.id);
+    await assert.rejects(reconcileOutcomes(f.store, true, transport));
+    assert.deepEqual(f.store.events(f.id), blockedEvents);
+  });
+}
+test("outcome failure preserves concurrent ownership", async (t) => {
+  const { reconcileOutcomes } = await import("../../dist/outcome.js");
+  const f = completed(t);
+  await assert.rejects(
+    reconcileOutcomes(f.store, true, async () => {
+      const db = new DatabaseSync(f.databasePath);
+      db.prepare("UPDATE jobs SET lease_owner=? WHERE id=?").run("other", f.id);
+      db.close();
+      return { status: 503, body: null };
+    }),
+  );
+  assert.equal(f.store.job(f.id).stage, "ready");
+  assert.equal(f.store.job(f.id).leaseOwner, "other");
+});

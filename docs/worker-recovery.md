@@ -49,7 +49,9 @@ old database to undo partial observations without reconciling external state.
 
 The supervised cycle also reconciles outcomes after reservation recovery and before
 readiness/polling, including while intake is paused. Uncertain outcome evidence
-halts that cycle before intake or new execution. Discovery reuses an existing
+halts that cycle before intake or new execution. On apply, an idle ready job whose
+outcome cannot be verified becomes readiness-check-failed; preview never revokes
+readiness, and concurrent reservations are left to their owner. Discovery reuses an existing
 terminal generation even when its issue remains open and labeled; a new generation
 requires the explicit existing rerun flow.
 

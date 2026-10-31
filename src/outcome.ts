@@ -111,19 +111,33 @@ export async function reconcileOutcomes(
     throw Error("Job is not an outcome reconciliation candidate");
   const results = [];
   for (const job of jobs) {
-    const remote = await readRemoteOutcome(
-      job.repository,
-      job.prNumber!,
-      transport,
-    );
-    const outcome = store.reconcileOutcome(job.id, remote, apply);
-    results.push({
-      jobId: job.id,
-      issue: job.issue,
-      pr: job.prNumber,
-      outcome,
-      applied: apply && outcome !== "open",
-    });
+    try {
+      const remote = await readRemoteOutcome(
+        job.repository,
+        job.prNumber!,
+        transport,
+      );
+      const outcome = store.reconcileOutcome(job.id, remote, apply);
+      results.push({
+        jobId: job.id,
+        issue: job.issue,
+        pr: job.prNumber,
+        outcome,
+        applied: apply && outcome !== "open",
+      });
+    } catch (error) {
+      // Failed observation must not preserve a readiness claim we cannot verify.
+      // Re-read after the network await; never alter another worker's reservation.
+      const current = store.job(job.id);
+      if (
+        apply &&
+        current?.stage === "ready" &&
+        !current.leaseOwner &&
+        !current.activeTurnId
+      )
+        store.revokeReadiness(job.id, "readiness-check-failed");
+      throw error;
+    }
   }
   return results;
 }

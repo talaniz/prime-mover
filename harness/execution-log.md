@@ -1872,3 +1872,19 @@ are not claimed. Synthetic protocol/recovery tests supplement bounded live probe
 
 Independent code review then distinct E2E review are required on this delivery head.
 No rendered UI code changed; screenshot evidence N/A, metadata contract covered by tests.
+
+### Build 009 review correction — stale readiness after failed outcome observation
+
+Accepted independent code review P2 ([report](https://github.com/talaniz/prime-mover/pull/9#issuecomment-6550386488)):
+when the outcome check runs before readiness rechecking, changed-head or unavailable
+remote evidence must revoke an idle ready claim on apply and stop the cycle. Preview
+must stay read-only; blocked jobs and concurrent ownership must remain unchanged.
+Added actual Store/workerCycle regression scenarios first: 9 passed, 2 failed with
+actual ready versus expected blocked. The correction re-reads ownership after the
+network operation and uses the transactional readiness revocation guard. Outcome
+validation itself remains mutation-free on rejection. No production state changed.
+Validation after correction: TypeScript lint/build and all 15 focused outcome
+integration/actual CLI E2E tests passed, including the two reproduced failures and
+concurrent ownership preservation. The original implementation's full 323-test
+serial run and required GitHub CI passed; final-head CI and independent re-review
+remain required. Runbook now describes failed-observation readiness revocation.
