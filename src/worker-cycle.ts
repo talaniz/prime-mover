@@ -2,6 +2,7 @@ import type { Store } from "./store.js";
 export interface CycleServices {
   preflight(): Promise<void>;
   recover(): Promise<string>;
+  outcomes(): Promise<void>;
   recheck(id: string): Promise<void>;
   poll(): Promise<void>;
   review(id: string, role: "code-review" | "e2e-review"): Promise<string>;
@@ -15,6 +16,7 @@ export async function workerCycle(
   await services.preflight();
   const recovery = await services.recover();
   if (recovery !== "clear") return recovery;
+  await services.outcomes();
   for (const job of store.jobs())
     if (job.stage === "ready") await services.recheck(job.id);
   if (store.paused()) return "paused";

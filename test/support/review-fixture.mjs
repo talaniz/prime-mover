@@ -80,5 +80,5 @@ export function fixture(t, budgetMs = 60000) {
       ],
       ...overrides,
     });
-  return { store, id, lease, project, reviews, e2e, task, report, evidence };
+  return { store, id, lease, project, reviews, e2e, task, report, evidence, databasePath:join(root,"db") };
 }

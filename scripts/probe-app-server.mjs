@@ -7,7 +7,14 @@ await mkdir(cwd,{recursive:true});
 let evidence;
 try {evidence=JSON.parse(await readFile(evidencePath,'utf8'));} catch(e) {if(e.code!=='ENOENT')throw e;evidence={};}
 const save=()=>writeFile(evidencePath,JSON.stringify(evidence,null,2)+'\n',{mode:0o600});
-let client=new AppServer(socket,30000);
+function connection() {
+ const c=new AppServer(socket,30000), request=c.request.bind(c);
+ c.request=async(method,params)=>{try{return await request(method,params);}catch(error){
+   evidence.failedMethod=method;await save();throw error;
+ }};
+ return c;
+}
+let client=connection();
 try {
  await client.connect();
  if(!evidence.threadId){
@@ -38,7 +45,7 @@ try {
   await new Promise(r=>setTimeout(r,1500));
  }
  if(!evidence.completed)throw Error('Probe observation deadline; retain IDs and inspect existing turn, do not restart');
- client.close();client=new AppServer(socket,30000);await client.connect();
+ client.close();client=connection();await client.connect();
  const read=await client.request('thread/read',{threadId:evidence.threadId,includeTurns:false});
  const resumed=await client.request('thread/resume',{threadId:evidence.threadId,...threadOptions(cwd)});
  if(read.thread.id!==evidence.threadId||resumed.thread.id!==evidence.threadId)throw Error('Reconnect identity mismatch');

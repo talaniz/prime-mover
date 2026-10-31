@@ -1829,3 +1829,46 @@ no restart attempted. Basic initialize/list/read probes passed, not full compati
 DB quick/foreign-key checks passed; no active turn/lease/pending operation. Two merged
 PRs remain readiness-blocked; PR17 genuinely conflicts. Intake remains enabled and
 issues labeled; latest backup predates issue22. No runtime changes performed.
+
+### Build 009 implementation and verification
+
+Meaningful red: the executable outcome-reconciliation scaffold rejected the merged
+readiness-blocked and closed-PR scenarios; 2/3 initial focused tests failed. The
+current-version capability test rejected 0.162.0 against the original 0.155.1 pin.
+The new metadata regression returned no blocker after a newer job completed. An
+initial scaffold compile failed unused-parameter checks and was corrected before
+recording behavioral red; it is not counted as red evidence.
+
+Implemented fresh remote outcome reads, atomic/idempotent previously-ready terminal
+transitions, paused outcome-only CLI application and read-only previews, cycle ordering,
+remaining-blocker metadata, CLI/config/connected-server version matching, and probe
+method diagnostics. Schema stays 2; no history, budget or notification reset. Existing
+terminal-generation intake deduplication is exercised explicitly. Runbook separates
+shared-daemon ownership, production backup/restore, paused activation and canary gates.
+
+Green: strict TypeScript and all 323 unit/integration/CLI tests passed with
+`npm run lint && npm run build && node --test --test-concurrency=1 test/unit/*.test.mjs test/integration/*.test.mjs test/e2e/*.test.mjs`.
+Default parallel `npm run check` passed 82 unit tests but hit one existing fixture
+lease expiration (76 seconds in ordinary-resume setup; 227/228 integration passed).
+The same test passed alone; the complete serial equivalent passed without changing
+lease limits or skipping tests. CI still runs the unmodified required npm run check.
+
+[Redacted live/private-copy evidence](evidence/worker-recovery.json) records successful
+0.162.0 task start/completion/history/reconnect/resume and interrupted terminal proof,
+with preserved sandbox/approval settings. Initial RPC -32601 and -32600 failures are
+recorded; same saved IDs were reconciled, not replaced. Their root cause is not inferred.
+Candidate service-preflight passed with a private config copy; live config unchanged.
+An initial read-only outcome preview returned GitHub invalid-response; fresh preview
+later passed. No remote writes were retried.
+
+Production snapshot used read-only SQLite online backup into ignored owner-only storage;
+isolated restore validated schema2, 4 jobs, 125 operations, 430 events. Fresh GitHub
+observations applied only to the copy: PR19/23 merged, PR17 open/conflicted and blocked,
+cancelled generation unchanged. Repeat made no duplicate changes; operation/notification
+digests were unchanged. Production still has 430 events, original blocked states and
+unpaused intake; no service/config/issue/production-ledger changes. A deployment-time
+fresh backup remains required. Full production canary and shared-daemon restart recovery
+are not claimed. Synthetic protocol/recovery tests supplement bounded live probes.
+
+Independent code review then distinct E2E review are required on this delivery head.
+No rendered UI code changed; screenshot evidence N/A, metadata contract covered by tests.

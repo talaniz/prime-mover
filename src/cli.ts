@@ -1,3 +1,5 @@
+import { requireCompatibility } from "./compatibility.js";
+import { reconcileOutcomes } from "./outcome.js";
 import { readReassessment } from "./reassessment.js";
 import path from "node:path";
 import { checkResources, requireMemoryController } from "./resources.js";
@@ -16,7 +18,7 @@ import { Scheduler, type WorkContext } from "./scheduler.js";
 import { StartupRecovery, recoveryRoute } from "./startup-recovery.js";
 import { readFile, lstat, mkdir } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
-import { validateConfig, PROTOCOL_VERSION, isWithin } from "./config.js";
+import { validateConfig, isWithin } from "./config.js";
 import { checkStorage, openRuntime, safeDescendant } from "./storage.js";
 import { metadataServer, metadataSnapshot } from "./metadata.js";
 import { listenMetadata } from "./metadata-listener.js";
@@ -28,6 +30,7 @@ import { Store, type Job } from "./store.js";
 const [command, configPath, ...args] = process.argv.slice(2);
 const commands = [
   "config-check",
+  "reconcile-outcomes",
   "doctor",
   "service-preflight",
   "backup",
@@ -158,20 +161,35 @@ if (!command || !commands.includes(command) || !configPath) {
           executionStarted: false,
         });
       }
+    } else if (command === "reconcile-outcomes") {
+      const apply = args[0] === "--apply";
+      const ids = apply ? args.slice(1) : args;
+      if (ids.length > 1 || ids.some((id) => id.startsWith("-")))
+        throw Error("Usage: reconcile-outcomes CONFIG [--apply] [JOB_ID]");
+      checkStorage(config);
+      const filename = path.join(
+        config.storage.root,
+        "data",
+        "prime-mover",
+        "jobs.sqlite",
+      );
+      store = new Store(filename, Date.now, !apply);
+      if (apply && !store.paused())
+        throw Error("Pause intake before operator outcome application");
+      output({
+        preview: !apply,
+        results: await reconcileOutcomes(store, apply, undefined, ids[0]),
+        executionStarted: false,
+      });
     } else if (["doctor", "service-preflight"].includes(command)) {
       checkStorage(config);
       if (command === "service-preflight") requireMemoryController();
       const resources = checkResources();
-      if (
-        config.appServer.version !== PROTOCOL_VERSION ||
-        execFileSync("codex", ["--version"], {
-          encoding: "utf8",
-          stdio: ["ignore", "pipe", "ignore"],
-        }).trim() !== `codex-cli ${PROTOCOL_VERSION}`
-      )
-        throw new Error(
-          "Unsupported app-server protocol version; repeat compatibility acceptance",
-        );
+      const cliVersion = execFileSync("codex", ["--version"], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+      requireCompatibility(config.appServer.version, cliVersion);
       await tokenFrom(config.metadata.tokenFile);
       // Read-only authentication probes; never start a task or create runtime state.
       execFileSync("gh", ["api", "user", "--jq", ".login"], {
@@ -184,6 +202,11 @@ if (!command || !commands.includes(command) || !configPath) {
       const client = new AppServer(config.appServer.socket);
       try {
         await client.connect();
+        requireCompatibility(
+          config.appServer.version,
+          cliVersion,
+          client.initialization,
+        );
         await client.request("thread/loaded/list", {});
       } finally {
         client.close();
@@ -193,7 +216,7 @@ if (!command || !commands.includes(command) || !configPath) {
         storage: "verified",
         resources,
         credentials: "available",
-        protocol: PROTOCOL_VERSION,
+        protocol: config.appServer.version,
         executionStarted: false,
       });
     } else {
@@ -297,16 +320,11 @@ if (!command || !commands.includes(command) || !configPath) {
           throw new Error("Unexpected command arguments");
         if (command === "resume-publication" && args.length < 2)
           throw new Error("Job ID and explicit reason are required");
-        if (
-          config.appServer.version !== PROTOCOL_VERSION ||
-          execFileSync("codex", ["--version"], {
-            encoding: "utf8",
-            stdio: ["ignore", "pipe", "ignore"],
-          }).trim() !== `codex-cli ${PROTOCOL_VERSION}`
-        )
-          throw new Error(
-            "Unsupported app-server protocol version; repeat compatibility acceptance",
-          );
+        const cliVersion = execFileSync("codex", ["--version"], {
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "ignore"],
+        });
+        requireCompatibility(config.appServer.version, cliVersion);
         const shutdown = new AbortController();
         const stop = () => shutdown.abort();
         process.once("SIGTERM", stop);
@@ -315,6 +333,11 @@ if (!command || !commands.includes(command) || !configPath) {
         let agent: ExecutionAgent | undefined;
         try {
           await app.connect();
+          requireCompatibility(
+            config.appServer.version,
+            cliVersion,
+            app.initialization,
+          );
           agent = new ExecutionAgent(store, app, Date.now, {
             transportAttempts: config.limits.transportAttempts,
           });
@@ -496,6 +519,9 @@ if (!command || !commands.includes(command) || !configPath) {
                 checkStorage(config);
               },
               recover,
+              outcomes: async () => {
+                await reconcileOutcomes(store!, true);
+              },
               recheck: async (id) => {
                 await recheckReady(id);
               },
