@@ -1817,3 +1817,15 @@ The new supported command, supervised by `prime-mover-review-reassess.service` w
 Live transition observed: reassessment request done, previous blocked cycle retained as blocked with a link to the request, new cycle3/round3 pending, and new turn `01a0c732-a6c1-73a2-a781-6ef923efcabc` on the same independent reviewer task `01a0c6d6-2954-7f82-8985-8e007ce75db5`. All44 previously completed issue18 operation hashes remain unchanged. Automatic recovery count remains3, review corrections1, and original deadline1790063072573 is unchanged. The ordinary worker supervisor remains stopped while the explicit continuation owns the job.
 
 This proves the live reassessment path has moved past the cached blocked report. It does not yet claim the reviewer's new verdict, E2E approval or readiness of DOOM PR19. No manual DOOM implementation, issue generation, merge or UI deployment occurred. Release notes summarize these verified observations; final notes-head sign-offs and later live status remain on PR7.
+
+## Build 009 recovery preparation — 2026-10-31
+
+Owner approved the bounded recovery plan after read-only diagnostics. Contract:
+[009-worker-recovery](builds/009-worker-recovery.md). Fetched origin/main, fast-forwarded
+local main, then created isolated feat/worker-recovery from 1a92b89. Existing MVA
+checkout and live releases untouched. Production worker failed its 0.155.1 version
+pin against CLI/server 0.162.0. Old app-server service competes with a live socket owner;
+no restart attempted. Basic initialize/list/read probes passed, not full compatibility.
+DB quick/foreign-key checks passed; no active turn/lease/pending operation. Two merged
+PRs remain readiness-blocked; PR17 genuinely conflicts. Intake remains enabled and
+issues labeled; latest backup predates issue22. No runtime changes performed.
