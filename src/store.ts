@@ -1,3 +1,4 @@
+import { validateOutcome } from "./outcome.js";
 import { backupDatabase, restoreDatabase } from "./backup.js";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { randomUUID } from "node:crypto";
@@ -112,8 +113,17 @@ export class Store {
   constructor(
     filename: string,
     private readonly now: () => number = Date.now,
+    readOnly = false,
   ) {
-    this.db = new DatabaseSync(filename);
+    this.db = new DatabaseSync(filename, { readOnly });
+    if (readOnly) {
+      this.db.exec("PRAGMA query_only=ON; PRAGMA busy_timeout=5000;");
+      if (this.one("PRAGMA user_version")?.user_version !== 2) {
+        this.db.close();
+        throw Error("Read-only inspection requires schema version 2");
+      }
+      return;
+    }
     try {
       this.db.exec(
         "PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;",
@@ -1376,6 +1386,72 @@ export class Store {
       );
       this.event(id, "readiness-revoked", { code });
     });
+  }
+  reconcileOutcome(id: string, outcome: unknown, apply = true): string {
+    const observe = () => {
+      validateOutcome(outcome);
+      const job = this.job(id);
+      const project =
+        job && this.projects().find((p) => p.id === job.projectId);
+      const target = new Reviews(this).current(id);
+      if (
+        !job ||
+        !project ||
+        !target ||
+        outcome.repository !== job.repository ||
+        outcome.number !== job.prNumber ||
+        outcome.head !== target.head ||
+        outcome.baseBranch !== project.baseBranch ||
+        !this.events(id).some(
+          (e) =>
+            e.kind === "ready" &&
+            (e.detail as { head?: string }).head === outcome.head,
+        )
+      )
+        throw Error("Outcome identity or recorded readiness mismatch");
+      if (
+        this.now() - outcome.observedAt > 30000 ||
+        outcome.observedAt > this.now() + 1000 ||
+        (outcome.mergedAt &&
+          Date.parse(outcome.mergedAt) > outcome.observedAt + 1000)
+      )
+        throw Error("Outcome requires fresh remote evidence");
+      if (
+        job.leaseOwner ||
+        job.activeTurnId ||
+        this.hasPending(id) ||
+        this.notifications(id).some((n) => n.status !== "done")
+      )
+        throw Error("Outcome requires reconciled reservations");
+      if (["merged", "closed"].includes(job.stage)) {
+        if (job.stage !== outcome.state)
+          throw Error(
+            "Terminal outcome changed; operator investigation required",
+          );
+        return job.stage;
+      }
+      if (
+        job.cancelRequested ||
+        !(
+          job.stage === "ready" ||
+          (job.stage === "blocked" &&
+            job.blockCode === "readiness-check-failed")
+        )
+      )
+        throw Error("Outcome requires an idle previously ready job");
+      if (outcome.state === "open") return "open";
+      if (apply) {
+        this.run(
+          "UPDATE jobs SET stage=?,block_code=NULL,retry_at=NULL,resume_stage=NULL,updated_at=? WHERE id=?",
+          outcome.state,
+          this.now(),
+          id,
+        );
+        this.event(id, "remote-outcome", { from: job.stage, ...outcome });
+      }
+      return outcome.state;
+    };
+    return apply ? this.transaction(observe) : observe();
   }
   finishCodeReview(lease: Lease, retainLease = false): void {
     this.transaction(() => {

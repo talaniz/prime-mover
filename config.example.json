@@ -8,7 +8,7 @@
   },
   "appServer": {
     "socket": "/home/palpatine/.codex/app-server-control/app-server-control.sock",
-    "version": "0.155.1"
+    "version": "0.162.0"
   },
   "metadata": {
     "socket": "/media/talaniz/postgresdata/codex-work/data/prime-mover/metadata.sock",

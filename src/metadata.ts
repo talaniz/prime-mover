@@ -72,13 +72,19 @@ export function metadataSnapshot(
         ["ready", "blocked", "cancelled", "merged", "closed"].includes(j.stage),
       )
       .sort((a, b) => b.updatedAt - a.updatedAt)[0];
+    const remainingBlocker = scoped
+      .filter(
+        (j) =>
+          !["merged", "closed", "cancelled"].includes(j.stage) && j.blockCode,
+      )
+      .sort((a, b) => b.updatedAt - a.updatedAt)[0];
     const blockCode =
       p.blockCode ??
       (active?.leaseUntil !== null &&
       active?.leaseUntil !== undefined &&
       active.leaseUntil <= now
         ? "lease-expired"
-        : (active?.blockCode ?? outcome?.blockCode ?? null));
+        : (active?.blockCode ?? remainingBlocker?.blockCode ?? null));
     return {
       id: p.id,
       name: p.name,

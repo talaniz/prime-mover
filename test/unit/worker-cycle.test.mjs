@@ -12,6 +12,9 @@ async function fixture(jobs = [], paused = false) {
       calls.push("recover");
       return "clear";
     },
+    outcomes: async () => {
+      calls.push("outcomes");
+    },
     recheck: async (id) => {
       calls.push(`recheck:${id}`);
     },
@@ -32,7 +35,13 @@ async function fixture(jobs = [], paused = false) {
 test("a cycle performs preflight and recovery before intake and one implementation", async () => {
   const f = await fixture();
   assert.equal(await f.run(), "pr-open");
-  assert.deepEqual(f.calls, ["preflight", "recover", "poll", "implement"]);
+  assert.deepEqual(f.calls, [
+    "preflight",
+    "recover",
+    "outcomes",
+    "poll",
+    "implement",
+  ]);
 });
 test("an uncertain reservation prevents all intake and competing execution", async () => {
   const f = await fixture();
@@ -49,7 +58,12 @@ test("reviews advance existing work before polling more issues, one stage per cy
     { id: "two", stage: "e2e-review", cancelRequested: false },
   ]);
   assert.equal(await f.run(), "ready");
-  assert.deepEqual(f.calls, ["preflight", "recover", "code-review:one"]);
+  assert.deepEqual(f.calls, [
+    "preflight",
+    "recover",
+    "outcomes",
+    "code-review:one",
+  ]);
 });
 test("paused intake still validates ready results but starts no review or implementation", async () => {
   const f = await fixture(
@@ -60,7 +74,12 @@ test("paused intake still validates ready results but starts no review or implem
     true,
   );
   assert.equal(await f.run(), "paused");
-  assert.deepEqual(f.calls, ["preflight", "recover", "recheck:ready"]);
+  assert.deepEqual(f.calls, [
+    "preflight",
+    "recover",
+    "outcomes",
+    "recheck:ready",
+  ]);
 });
 test("storage/dependency preflight failure performs no recovery or intake", async () => {
   const f = await fixture();
@@ -69,4 +88,13 @@ test("storage/dependency preflight failure performs no recovery or intake", asyn
   };
   await assert.rejects(f.run(), /missing mount/);
   assert.deepEqual(f.calls, []);
+});
+
+test("uncertain outcome stops intake and execution", async () => {
+  const f = await fixture();
+  f.services.outcomes = async () => {
+    throw Error("unavailable");
+  };
+  await assert.rejects(f.run(), /unavailable/);
+  assert.deepEqual(f.calls, ["preflight", "recover"]);
 });

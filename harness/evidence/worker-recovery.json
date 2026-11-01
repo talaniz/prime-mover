@@ -1,0 +1,55 @@
+{
+  "build": "009",
+  "environment": "Raspberry Pi OS, aarch64, Node 22.23.2, Codex CLI and connected server 0.162.0",
+  "base": "1a92b89fecf2798fa5242e7a5b8900467c07b821",
+  "scope": "isolated recovery implementation and rehearsal; production activation not performed",
+  "liveProtocol": {
+    "threadStart": "passed",
+    "turnStartAndCompletion": "passed",
+    "historyAndRead": "passed",
+    "disconnectReconnectResume": "passed with same thread and completed turn",
+    "approvalPolicy": "on-request",
+    "approvalsReviewer": "auto_review",
+    "sandbox": "workspaceWrite",
+    "interrupt": "accepted; same turn observed interrupted",
+    "limitations": [
+      "Initial lifecycle attempt returned RPC -32601 without method-specific evidence; same saved task/turn later completed and history/resume passed. No removed method or root cause inferred.",
+      "Initial interrupt returned RPC -32600; bounded continuation on the same saved turn accepted interruption and history proved terminal interrupted state.",
+      "Approval response handling and ambiguous/disconnected execution paths additionally exercised by synthetic protocol fixtures; no shared daemon restart or production canary."
+    ]
+  },
+  "isolatedLedger": {
+    "sourceAccess": "SQLite-consistent read-only snapshot of production into ignored owner-only workspace",
+    "restore": "schema 2 integrity-checked isolated restore, paused",
+    "jobs": 4,
+    "operations": 125,
+    "eventsBeforeReconciliation": 430,
+    "remoteEvidence": "fresh GitHub GET requests",
+    "results": {
+      "doom-control/19": "merged",
+      "doom-control/23": "merged",
+      "doom-control/17": "open; existing conflict blocker preserved"
+    },
+    "cancelledGeneration": "unchanged",
+    "operationsAndNotifications": "identical before and after",
+    "repeat": "no duplicate outcomes",
+    "productionPreview": "passed; no execution started",
+    "limitations": [
+      "First production preview returned GitHub invalid-response; later fresh read-only preview passed. No mutation/retry of external writes.",
+      "Development snapshot does not replace deployment-time backup and rollback capture."
+    ]
+  },
+  "candidateServicePreflight": {
+    "result": "passed",
+    "configuredVersion": "0.162.0",
+    "checks": [
+      "mount UUID and capacity",
+      "memory controller and reserve",
+      "GitHub identity and both repositories",
+      "connected server identity",
+      "read-only loaded-thread listing"
+    ],
+    "executionStarted": false,
+    "productionConfigChanged": false
+  }
+}

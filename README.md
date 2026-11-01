@@ -324,3 +324,8 @@ No templates have been installed/enabled, and no boot settings have been changed
 See [the acceptance index](docs/mva-acceptance.md) for the eight criteria, actual fixture
 PR/review/notification evidence, DOOM integration, fresh-checkout commands and remaining
 review/deployment gates. The product PRs remain subject to independent final-head reviews.
+
+## Worker recovery
+
+See [controlled worker recovery](docs/worker-recovery.md) for supported versions,
+read-only outcome previews, paused application and deployment/rollback gates.

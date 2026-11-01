@@ -1817,3 +1817,94 @@ The new supported command, supervised by `prime-mover-review-reassess.service` w
 Live transition observed: reassessment request done, previous blocked cycle retained as blocked with a link to the request, new cycle3/round3 pending, and new turn `01a0c732-a6c1-73a2-a781-6ef923efcabc` on the same independent reviewer task `01a0c6d6-2954-7f82-8985-8e007ce75db5`. All44 previously completed issue18 operation hashes remain unchanged. Automatic recovery count remains3, review corrections1, and original deadline1790063072573 is unchanged. The ordinary worker supervisor remains stopped while the explicit continuation owns the job.
 
 This proves the live reassessment path has moved past the cached blocked report. It does not yet claim the reviewer's new verdict, E2E approval or readiness of DOOM PR19. No manual DOOM implementation, issue generation, merge or UI deployment occurred. Release notes summarize these verified observations; final notes-head sign-offs and later live status remain on PR7.
+
+## Build 009 recovery preparation — 2026-10-31
+
+Owner approved the bounded recovery plan after read-only diagnostics. Contract:
+[009-worker-recovery](builds/009-worker-recovery.md). Fetched origin/main, fast-forwarded
+local main, then created isolated feat/worker-recovery from 1a92b89. Existing MVA
+checkout and live releases untouched. Production worker failed its 0.155.1 version
+pin against CLI/server 0.162.0. Old app-server service competes with a live socket owner;
+no restart attempted. Basic initialize/list/read probes passed, not full compatibility.
+DB quick/foreign-key checks passed; no active turn/lease/pending operation. Two merged
+PRs remain readiness-blocked; PR17 genuinely conflicts. Intake remains enabled and
+issues labeled; latest backup predates issue22. No runtime changes performed.
+
+### Build 009 implementation and verification
+
+Meaningful red: the executable outcome-reconciliation scaffold rejected the merged
+readiness-blocked and closed-PR scenarios; 2/3 initial focused tests failed. The
+current-version capability test rejected 0.162.0 against the original 0.155.1 pin.
+The new metadata regression returned no blocker after a newer job completed. An
+initial scaffold compile failed unused-parameter checks and was corrected before
+recording behavioral red; it is not counted as red evidence.
+
+Implemented fresh remote outcome reads, atomic/idempotent previously-ready terminal
+transitions, paused outcome-only CLI application and read-only previews, cycle ordering,
+remaining-blocker metadata, CLI/config/connected-server version matching, and probe
+method diagnostics. Schema stays 2; no history, budget or notification reset. Existing
+terminal-generation intake deduplication is exercised explicitly. Runbook separates
+shared-daemon ownership, production backup/restore, paused activation and canary gates.
+
+Green: strict TypeScript and all 323 unit/integration/CLI tests passed with
+`npm run lint && npm run build && node --test --test-concurrency=1 test/unit/*.test.mjs test/integration/*.test.mjs test/e2e/*.test.mjs`.
+Default parallel `npm run check` passed 82 unit tests but hit one existing fixture
+lease expiration (76 seconds in ordinary-resume setup; 227/228 integration passed).
+The same test passed alone; the complete serial equivalent passed without changing
+lease limits or skipping tests. CI still runs the unmodified required npm run check.
+
+[Redacted live/private-copy evidence](evidence/worker-recovery.json) records successful
+0.162.0 task start/completion/history/reconnect/resume and interrupted terminal proof,
+with preserved sandbox/approval settings. Initial RPC -32601 and -32600 failures are
+recorded; same saved IDs were reconciled, not replaced. Their root cause is not inferred.
+Candidate service-preflight passed with a private config copy; live config unchanged.
+An initial read-only outcome preview returned GitHub invalid-response; fresh preview
+later passed. No remote writes were retried.
+
+Production snapshot used read-only SQLite online backup into ignored owner-only storage;
+isolated restore validated schema2, 4 jobs, 125 operations, 430 events. Fresh GitHub
+observations applied only to the copy: PR19/23 merged, PR17 open/conflicted and blocked,
+cancelled generation unchanged. Repeat made no duplicate changes; operation/notification
+digests were unchanged. Production still has 430 events, original blocked states and
+unpaused intake; no service/config/issue/production-ledger changes. A deployment-time
+fresh backup remains required. Full production canary and shared-daemon restart recovery
+are not claimed. Synthetic protocol/recovery tests supplement bounded live probes.
+
+Independent code review then distinct E2E review are required on this delivery head.
+No rendered UI code changed; screenshot evidence N/A, metadata contract covered by tests.
+
+### Build 009 review correction — stale readiness after failed outcome observation
+
+Accepted independent code review P2 ([report](https://github.com/talaniz/prime-mover/pull/9#issuecomment-6550386488)):
+when the outcome check runs before readiness rechecking, changed-head or unavailable
+remote evidence must revoke an idle ready claim on apply and stop the cycle. Preview
+must stay read-only; blocked jobs and concurrent ownership must remain unchanged.
+Added actual Store/workerCycle regression scenarios first: 9 passed, 2 failed with
+actual ready versus expected blocked. The correction re-reads ownership after the
+network operation and uses the transactional readiness revocation guard. Outcome
+validation itself remains mutation-free on rejection. No production state changed.
+Validation after correction: TypeScript lint/build and all 15 focused outcome
+integration/actual CLI E2E tests passed, including the two reproduced failures and
+concurrent ownership preservation. The original implementation's full 323-test
+serial run and required GitHub CI passed; final-head CI and independent re-review
+remain required. Runbook now describes failed-observation readiness revocation.
+
+### Build 009 independent reviews and release notes
+
+Corrected implementation `99f7be0c3eae16e515afc19d9d03770fb6ea3d43` received
+[independent code sign-off](https://github.com/talaniz/prime-mover/pull/9#issuecomment-6552886082)
+after lint/build and 21 focused tests, resolving the stale-readiness P2. Required
+GitHub npm run check passed on this head. Then a distinct reviewer provided
+[E2E sign-off](https://github.com/talaniz/prime-mover/pull/9#issuecomment-6552908744):
+11 actual CLI/HTTP/intake scenarios passed, including remaining-blocker metadata,
+401/405 boundaries, preview immutability, paused/repeated outcomes, invalid evidence,
+reservation refusal, deduplication and stale-readiness failures. Initial disposable
+review-harness mistakes were corrected; no product defect or source fix resulted.
+Live probe artifacts were inspected, not rerun. Reviewers used repository role
+instructions verbatim because named-role selection was unavailable.
+
+No blocking findings remain on the reviewed implementation. Generated
+[worker recovery release notes](release-notes/worker-recovery.md) from this verified
+log and review evidence. This separate notes-only commit still requires both reviewers'
+exact-head revalidation and final CI before draft-to-ready transition. Production
+activation, fresh deployment backup/restore and canary remain unperformed and gated.

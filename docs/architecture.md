@@ -44,7 +44,8 @@ Add established CI check names with the Build 008 workflow and document the dist
 
 ## App-server compatibility and recovery
 
-Supported baseline: installed Codex 0.155.1 protocol, generated using
+Original baseline: installed Codex 0.155.1 protocol (current accepted versions and
+recovery gates are in [worker recovery](worker-recovery.md)), generated using
 `codex app-server generate-ts --experimental --out harness/build/protocol`.
 Core methods: initialize/initialized, thread/start, thread/read (metadata),
 thread/resume, thread/turns/list (paginated), turn/start and turn/interrupt.

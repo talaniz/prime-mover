@@ -8,6 +8,7 @@ export class AppServer extends EventEmitter {
   private ws: WebSocket | undefined;
   private pending = new Map<number, Pending>();
   private nextId = 1;
+  initialization: unknown;
   constructor(private readonly socket: string, private readonly timeoutMs = 10000) { super(); }
   async connect(): Promise<void> {
     if (this.ws) throw new Error('App-server client already connected; create a new client to reconcile');
@@ -33,7 +34,7 @@ export class AppServer extends EventEmitter {
       ws.once('close',() => reject(new Error('App-server disconnected during connection')));
     });
     try {
-      await this.request('initialize',{clientInfo:{name:'prime_mover',title:'Prime Mover',version:'0.1.0'},capabilities:{experimentalApi:true}});
+      this.initialization = await this.request('initialize',{clientInfo:{name:'prime_mover',title:'Prime Mover',version:'0.1.0'},capabilities:{experimentalApi:true}});
       ws.send(JSON.stringify({method:'initialized'}));
     } catch (error) { this.close(); throw error; }
   }

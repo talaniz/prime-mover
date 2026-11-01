@@ -14,7 +14,8 @@ export interface Config {
   limits: {activeJobs: 1; activeTurns: 1; transportAttempts: number; correctionCycles: number; turnSeconds: number; jobSeconds: number};
   pollSeconds: number; projects: ProjectConfig[];
 }
-export const PROTOCOL_VERSION = '0.155.1';
+export const PROTOCOL_VERSION = '0.162.0';
+export const ACCEPTED_PROTOCOL_VERSIONS = ['0.155.1', PROTOCOL_VERSION] as const;
 export const REQUIRED_METHODS = ['thread/start', 'thread/resume', 'thread/read', 'thread/turns/list', 'turn/start', 'turn/interrupt'] as const;
 function invalid(field: string): never { throw new Error(`Invalid configuration: ${field}`); }
 function record(value: unknown, keys: string[], field: string, optional: string[] = []): Record<string, unknown> {
@@ -94,7 +95,7 @@ export function validateConfig(value: unknown): Config {
   return {schemaVersion:1,...(gitAuthor ? {gitAuthor} : {}),storage,appServer,metadata,limits,pollSeconds:positive(c.pollSeconds,'pollSeconds'),projects};
 }
 export function validateCapabilities(value: {version: string; methods: readonly string[]; autoReview: boolean}): void {
-  if (!value || value.version !== PROTOCOL_VERSION || value.autoReview !== true || !Array.isArray(value.methods) || REQUIRED_METHODS.some(m => !value.methods.includes(m))) {
+  if (!value || !ACCEPTED_PROTOCOL_VERSIONS.some(v => v === value.version) || value.autoReview !== true || !Array.isArray(value.methods) || REQUIRED_METHODS.some(m => !value.methods.includes(m))) {
     throw new Error(`Unsupported app-server protocol; validate Codex ${PROTOCOL_VERSION}, lifecycle/history methods and auto_review before execution`);
   }
 }
