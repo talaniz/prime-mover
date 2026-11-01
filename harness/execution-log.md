@@ -1888,3 +1888,23 @@ integration/actual CLI E2E tests passed, including the two reproduced failures a
 concurrent ownership preservation. The original implementation's full 323-test
 serial run and required GitHub CI passed; final-head CI and independent re-review
 remain required. Runbook now describes failed-observation readiness revocation.
+
+### Build 009 independent reviews and release notes
+
+Corrected implementation `99f7be0c3eae16e515afc19d9d03770fb6ea3d43` received
+[independent code sign-off](https://github.com/talaniz/prime-mover/pull/9#issuecomment-6552886082)
+after lint/build and 21 focused tests, resolving the stale-readiness P2. Required
+GitHub npm run check passed on this head. Then a distinct reviewer provided
+[E2E sign-off](https://github.com/talaniz/prime-mover/pull/9#issuecomment-6552908744):
+11 actual CLI/HTTP/intake scenarios passed, including remaining-blocker metadata,
+401/405 boundaries, preview immutability, paused/repeated outcomes, invalid evidence,
+reservation refusal, deduplication and stale-readiness failures. Initial disposable
+review-harness mistakes were corrected; no product defect or source fix resulted.
+Live probe artifacts were inspected, not rerun. Reviewers used repository role
+instructions verbatim because named-role selection was unavailable.
+
+No blocking findings remain on the reviewed implementation. Generated
+[worker recovery release notes](release-notes/worker-recovery.md) from this verified
+log and review evidence. This separate notes-only commit still requires both reviewers'
+exact-head revalidation and final CI before draft-to-ready transition. Production
+activation, fresh deployment backup/restore and canary remain unperformed and gated.
